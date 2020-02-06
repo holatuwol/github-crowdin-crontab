@@ -1,0 +1,9 @@
+#!/bin/bash
+
+wget https://artifacts.crowdin.com/repo/deb/crowdin.deb -O crowdin.deb
+sudo dpkg -i crowdin.deb
+
+sudo apt-get install apache2
+sudo service apache2 start
+
+sudo apt-get install python3-venv python3-sphinx unzip zip

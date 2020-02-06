@@ -1,5 +1,5 @@
-git_repository,git_branch,git_folder,project_id,project_folder,single_folder
-zendesk-articles,master,en,liferay-documentation,zendesk,000000000000-Fast-Track
-liferay-docs,7.1.x,en/develop/tutorials/articles,liferay-documentation,liferay-docs/7.1.x/develop/tutorials/articles,
-liferay-docs,7.1.x,en/develop/tutorials/articles-dxp,liferay-documentation,liferay-docs/7.1.x/develop/tutorials/articles-dxp,
-liferay-learn,master,docs/commerce/2.x/en,liferay-documentation,liferay-learn/commerce/2.x,
+git_repository,git_branch,git_folder,project_id,project_name,project_folder,single_folder,delete_enabled
+zendesk-articles,master,en,378113,liferay-documentation,zendesk,000000000000-Fast-Track,FALSE
+liferay-docs,7.1.x,en/develop/tutorials/articles,378113,liferay-documentation,liferay-docs/7.1.x/develop/tutorials/articles,,TRUE
+liferay-docs,7.1.x,en/develop/tutorials/articles-dxp,378113,liferay-documentation,liferay-docs/7.1.x/develop/tutorials/articles-dxp,,TRUE
+liferay-learn,master,docs/commerce/2.x/en,378113,liferay-documentation,liferay-learn/commerce/2.x,,FALSE
