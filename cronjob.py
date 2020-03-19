@@ -250,15 +250,11 @@ def get_repositories(check_accessible=True):
 def run_cronjob():
     os.chdir(initial_dir)
 
-    update_zendesk = False
     repositories = get_repositories()
 
     for repository in repositories:
         if repository.crowdin.dest_folder.find('zendesk') == 0:
-            update_zendesk = True
-
-    if update_zendesk:
-        update_zendesk_articles()
+            update_zendesk_articles(repository)
 
     for repository in repositories:
         update_result = update_repository(repository)

@@ -400,25 +400,11 @@ def delete_code_translations(repository, file_name, file_info):
     if crowdin_file_name not in file_info:
         return False
 
-    if os.path.exists(file_name):
-        with open(file_name, 'r') as f:
-            file_content = f.read()
-
-        extension = file_name[file_name.rfind('.'):]
-
-        if extension == '.md' or extension == '.markdown':
-            cmd = ['pandoc', '--from=gfm', '--to=html']
-            pipe = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-            out, err = pipe.communicate(input=file_content.encode('utf-8'))
-            file_content = out.decode('UTF-8', 'replace')
-
-        if file_content.find('<code>') == -1 and file_content.find('<pre>') == -1:
-            return False
-
     logging.info('Checking auto code translations for file %s' % file_name)
 
     def is_within_code_tag(x):
-        return x.name == 'code' or x.name == 'pre' or \
+        return x.text and x.text.find('[TOC') == 0 or \
+            x.name == 'code' or x.name == 'pre' or \
             x.find_parent('code') is not None or x.find_parent('pre') is not None or \
             x.find_parent(attrs={'id': 'front-matter'}) is not None
 
