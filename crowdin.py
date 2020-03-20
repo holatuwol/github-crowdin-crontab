@@ -108,19 +108,8 @@ def crowdin_upload_sources(repository, new_files):
                 f.write(file_content)
 
     if len(new_files) > 0:
-        root_files = [file for file in new_files if file.find(repository.github.project_folder) == 0 and file.find('/', len(repository.github.project_folder) + 1) == 0]
-
-        configure_crowdin(repository, root_files)
+        configure_crowdin(repository, new_files)
         _crowdin('upload', 'sources')
-
-        root_folders = get_root_folders(repository, new_files)
-
-        for root_folder in root_folders:
-            prefix = root_folder + '/'
-            folder_files = [file for file in new_files if file.find(prefix) == 0]
-            
-            configure_crowdin(repository, folder_files)
-            _crowdin('upload', 'sources')
 
     git.reset('--hard')
 
@@ -213,6 +202,15 @@ def delete_translation(repository, file):
     }
 
     return crowdin_request(repository, '/delete-file', 'POST', data)
+
+def delete_translation_folder(repository, folder):
+    logging.info('crowdin-api delete-directory %s' % folder)
+
+    data = {
+        'name': folder
+    }
+
+    return crowdin_request(repository, '/delete-directory', 'POST', data)
 
 def extract_crowdin_file_info(files_element, current_path, file_info):
     for item in files_element.children:
@@ -367,7 +365,7 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
                     if suggestion_filter(suggestion)
             ]
         else:
-            print('Unable to find translation %s for file %s' % (translation_id, file_name))
+            logging.info('Unable to find translation %s for file %s' % (translation_id, file_name))
             suggestions = []
 
         if len(suggestions) > 0:
@@ -447,8 +445,7 @@ def pre_translate(repository, translation_needed, file_info):
 
     translation_crowdin_files = translation_files.values()
     
-    #translate_with_memory(repository, translation_crowdin_files)
-    #translate_with_machine(repository, translation_crowdin_files)
+    translate_with_machine(repository, translation_crowdin_files)
     
     for file in translation_files.keys():
         delete_code_translations(repository, file, file_info)
