@@ -131,7 +131,7 @@ def get_zendesk_articles(domain):
 
     # Override past articles
 
-    articles.update({article['id']: article for article in new_articles})
+    articles.update({str(article['id']): article for article in new_articles})
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
@@ -167,6 +167,55 @@ def update_zendesk_articles(repository, domain):
 
     delete_translation_folder(repository, repository.crowdin.dest_folder)
 
+def add_category_articles(articles, categories, category_name, sections, article_paths):
+    category_id = None
+
+    for category in categories:
+        if category['name'] == category_name:
+            category_id = category['id']
+
+    if category_id is None:
+        return
+
+    section_paths = {
+        section['id']: section['html_url'][section['html_url'].rfind('/'):]
+            for section in sections
+                if section['category_id'] == category_id
+    }
+
+    def get_category_article_path(article):
+        section_path = section_paths[article['section_id']]
+        date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
+        url_name = article['html_url'][article['html_url'].rfind('/'):]
+
+        return 'en/%s/%s/%s%s.html' % (category_name, section_path, date_folder, url_name)
+
+    article_paths.update({
+        str(article['id']): get_category_article_path(article)
+            for article in articles.values()
+                if article['section_id'] in section_paths and
+                    not article['draft'] and
+                    article['locale'] == 'en-us' and
+                    'Fast Track' not in article['label_names']
+    })
+
+def add_label_articles(articles, label_name, article_paths):
+    section_path = label_name
+
+    def get_fast_track_article_path(article):
+        date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
+        url_name = article['html_url'][article['html_url'].rfind('/'):]
+
+        return 'en/%s/%s%s.html' % (section_path, date_folder, url_name)
+
+    article_paths.update({
+        str(article['id']): get_fast_track_article_path(article)
+            for article in articles.values()
+                if not article['draft'] and
+                    article['locale'] == 'en-us' and
+                    label_name in article['label_names']
+    })
+
 def download_zendesk_articles(repository, domain):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
@@ -175,38 +224,14 @@ def download_zendesk_articles(repository, domain):
     # Determine the proper folder structure
 
     categories = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
-    category_paths = {
-        category['id']: 'en/' + category['html_url'][category['html_url'].rfind('/'):]
-            for category in categories
-    }
-
     sections = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')
-    section_paths = {
-        section['id']: category_paths[section['category_id']] + section['html_url'][section['html_url'].rfind('/'):]
-            for section in sections
-    }
 
     articles = get_zendesk_articles(domain)
     article_paths = {}
 
-    if False:
-        article_paths.update({
-            str(article['id']): section_paths[article['section_id']] + article['html_url'][article['html_url'].rfind('/'):] + '.html'
-                for article in articles.values()
-                    if article['section_id'] in section_paths and not article['draft'] and article['locale'] == 'en-us' and 'Fast Track' not in article['label_names']
-        })
-
-    def get_article_path(article):
-        date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
-        url_name = article['html_url'][article['html_url'].rfind('/'):]
-
-        return 'en/' + ('0'*12) + '-Fast-Track/' + date_folder + url_name + '.html'
-
-    article_paths.update({
-        str(article['id']): get_article_path(article)
-            for article in articles.values()
-                if article['section_id'] in section_paths and not article['draft'] and article['locale'] == 'en-us' and 'Fast Track' in article['label_names']
-    })
+    add_category_articles(articles, categories, 'Liferay DXP 7.1 Admin Guide', sections, article_paths)
+    add_label_articles(articles, 'Knowledge Base', article_paths)
+    add_label_articles(articles, 'Fast Track', article_paths)
 
     os.chdir(repository.github.git_root)
 
@@ -217,11 +242,11 @@ def download_zendesk_articles(repository, domain):
         if not os.path.exists(article_folder):
             os.makedirs(article_folder)
 
-        if article_id in articles:
+        if article_id in articles and articles[article_id]['body'] is not None:
             with open(article_file_name, 'w', encoding='utf-8') as f:
-                f.write('<h1>%s</h1>\n' % articles[article_id]['title'])
-                f.write(articles[article_id]['body'])
-            
+                f.write('<h1>%s</h1>\n' % articles[str(article_id)]['title'])
+                f.write(articles[str(article_id)]['body'])
+
             git.add(article_file_name)
         else:
             print('Missing %s with path %s' % (article_id, article_path))
