@@ -7,36 +7,23 @@ def get_folders(files):
 # since we want to break everything up at the root folder level.
 
 def get_root_folders(repository, candidate_files):
-    candidate_folders = get_folders(candidate_files)
-
-    root_folders = set()
-    
-    prefix = repository.github.project_folder + '/'
-
-    single_folder = repository.github.single_folder
-    
-    if single_folder is None:
+    if repository.github.single_folder is None:
         prefix = repository.github.project_folder + '/'
     else:
         prefix = repository.github.single_folder + '/'
-    
-    for folder in candidate_folders:
-        if folder == repository.github.project_folder:
-            continue
 
-        if folder != single_folder and folder.find(prefix) != 0:
-            continue
+    matching_folders = [
+        folder for folder in get_folders(candidate_files)
+            if folder.find(prefix) == 0
+    ]
 
-        parent_folder = folder
+    root_folders = []
 
-        while parent_folder != repository.github.project_folder:
-            folder = parent_folder
-            parent_folder = os.path.dirname(folder)
+    for matching_folder in matching_folders:
+        if len(root_folders) == 0 or matching_folder.find(root_folders[-1]) != 0:
+            root_folders.append(matching_folder)
 
-        if parent_folder != '':
-            root_folders.add(folder)
-
-    return sorted(list(root_folders))
+    return root_folders
 
 def get_crowdin_file(repository, local_file):
     return repository.crowdin.dest_folder + '/' + local_file[len(repository.github.project_folder)+1:]
@@ -58,7 +45,10 @@ def get_files(folder):
     return list(files)
 
 def is_translation_eligible(repository, file, language_id):
-    prefix = repository.github.project_folder
+    if repository.github.single_folder is None:
+        prefix = repository.github.project_folder + '/'
+    else:
+        prefix = repository.github.single_folder + '/'
 
     if file.find(prefix) == 0:
         if file[0:3] == language_id + '/' or file.find('/' + language_id + '/') != -1:

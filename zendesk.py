@@ -21,6 +21,8 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
 
     url = 'https://%s/api/v2%s' % (domain, api_path)
 
+    logging.info(url)
+
     if request_type == 'POST':
         r = session.post(url, headers=auth_headers, json=json_params)
     elif request_type == 'PUT':
@@ -70,9 +72,9 @@ def zendesk_get_request(domain, api_path, attribute_name, params=None):
         if url is None:
             break
 
-        r = session.get(url)
-
         logging.info(url)
+
+        r = session.get(url)
 
         api_result = json.loads(r.text)
 
@@ -167,6 +169,8 @@ def update_zendesk_articles(repository, domain):
 
     delete_translation_folder(repository, repository.crowdin.dest_folder)
 
+    return articles
+
 def add_category_articles(articles, categories, category_name, sections, article_paths):
     category_id = None
 
@@ -229,7 +233,9 @@ def download_zendesk_articles(repository, domain):
     articles = get_zendesk_articles(domain)
     article_paths = {}
 
+    add_category_articles(articles, categories, 'Announcements', sections, article_paths)
     add_category_articles(articles, categories, 'Liferay DXP 7.1 Admin Guide', sections, article_paths)
+
     add_label_articles(articles, 'Knowledge Base', article_paths)
     add_label_articles(articles, 'Fast Track', article_paths)
 
@@ -258,11 +264,11 @@ def download_zendesk_articles(repository, domain):
     return articles
 
 def update_zendesk_translation(domain, article, file):
-    target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-    if git.ls_files(target_file) != '' and git.diff(target_file) == '':
-        print('%s translation is up-to-date' % file)
+    if 'ja' in article['label_names'] and 'ja' not in article['outdated_locales']:
+        print('%s translation already exists on zendesk' % file)
         return False
+
+    target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
 
     api_path = '/help_center/articles/%s/translations/missing.json' % article['id']
 
@@ -302,5 +308,18 @@ def update_zendesk_translation(domain, article, file):
         api_path = '/help_center/articles/%s/translations/ja.json' % article['id']
 
         zendesk_json_request(domain, api_path, 'translation', 'PUT', json_params)
+
+    article['label_names'].append('ja')
+
+    json_params = {
+        'article': {
+        	'user_segment_id': article['user_segment_id'],
+            'label_names': article['label_names']
+        }
+    }
+
+    api_path = '/help_center/articles/%s.json' % article['id']
+
+    zendesk_json_request(domain, api_path, 'article', 'PUT', json_params)
 
     return True
