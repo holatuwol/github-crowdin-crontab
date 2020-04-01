@@ -1,7 +1,39 @@
 #!/bin/bash
 
-cd $(dirname ${BASH_SOURCE[0]})/../liferay-learn/docs
-for file in $(find . -type f -not -name '*.md' | grep -F '/en/'); do mkdir -p $(echo "${file}" | sed 's@/en/@/ja/@g' | xargs dirname); cp ${file} $(echo "${file}" | sed 's@/en/@/ja/@g'); done
-cd ../site
+SCRIPT_FOLDER=$(dirname ${BASH_SOURCE[0]})
+
+cd ${SCRIPT_FOLDER}/../liferay-learn/docs
+
+for file in $(find . -type f -not -name '*.md' | grep -F '/en/'); do
+	JA_FILE=$(echo "${file}" | sed 's@/en/@/ja/@g')
+	mkdir -p $(dirname "${JA_FILE}")
+	cp ${file} ${JA_FILE}
+done
+
+for file in $(find . -type f -name '*.md' | grep -F '/en/'); do
+	JA_FILE=$(echo "${file}" | sed 's@/en/@/ja/@g')
+	mkdir -p $(dirname "${JA_FILE}")
+
+	if [ ! -f "${JA_FILE}" ]; then
+		cp ${file} ${JA_FILE}
+	fi
+done
+
+cd -
+
+cd ${SCRIPT_FOLDER}/../liferay-learn/site
+
+git checkout ./build_site.sh
+
 sed -i.bak 's/git clean/#git clean/g' build_site.sh
+
+sed -i.bak 's@/en/@/ja/@g' build_site.sh
+sed -i.bak 's/language = "en"/language = "ja"/g' docs/conf.py homepage/conf.py
+
+if [ "${1}" == "pdf" ]; then
+	sed -i.bak 's/-M html/-M latexpdf/g' build_site.sh
+fi
+
 ./build_site.sh
+
+cd -

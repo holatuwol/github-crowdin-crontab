@@ -42,15 +42,18 @@ def get_repositories(check_accessible=True):
 def run_cronjob():
     os.chdir(initial_dir)
 
+    uat_domain = 'liferaysupport1528999723.zendesk.com'
+    prod_domain = 'liferay-support.zendesk.com'
+
     repositories = get_repositories()
 
     for repository in repositories:
         if repository.crowdin.dest_folder.find('zendesk') == 0:
-            update_zendesk_articles(repository)
+            update_zendesk_articles(repository, uat_domain)
 
     for repository in repositories:
-        update_result = update_repository(repository)
-        recheck_code_translations(repository, update_result)
+        if repository.crowdin.dest_folder.find('zendesk') == -1:
+            update_result = update_repository(repository)
 
 if __name__ == '__main__':
     run_cronjob()

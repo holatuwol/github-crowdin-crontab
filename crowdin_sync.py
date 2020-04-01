@@ -76,8 +76,8 @@ def update_sources(repository, new_files):
 # Retrieve the list of all files we should translate and all updated files that
 # we need to re-translate.
 
-def get_branch_files(repository):
-    if repository.github.upstream is not None:
+def get_branch_files(repository, check_upstream=False):
+    if check_upstream and repository.github.upstream is not None:
         git.fetch(
             'upstream', '--no-tags', '%s:refs/remotes/upstream/%s' % \
                 (repository.github.branch, repository.github.branch))
@@ -103,13 +103,7 @@ def get_branch_files(repository):
 def update_translations(repository, all_files):
     now = datetime.now()
 
-    status_output = '\n'.join([line[3:] for line in git.status('--porcelain', strip=False).split('\n')])
-    commit_files = get_eligible_files(repository, status_output, 'ja')
-
-    if len(commit_files) == 0:
-        return
-
-    for file in commit_files:
+    for file in all_files:
         if file[-3:] == '.md':
             continue
 
@@ -119,25 +113,24 @@ def update_translations(repository, all_files):
             os.remove(md_file)
             os.rename(file, md_file)
 
-    status_output = '\n'.join([line[3:] for line in git.status('--porcelain', strip=False).split('\n')])
-    commit_files = get_eligible_files(repository, status_output, 'ja')
+    for file in all_files:
+        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
 
-    if len(commit_files) == 0:
-        return
+        if os.path.isfile(target_file):
+            git.add(target_file)
 
-    git.add(*commit_files)
     git.commit('-m', 'Updated translations %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
 
 # Update local copies of translations, translation memory, and glossaries.
 
-def get_repository_state(repository):
+def get_repository_state(repository, check_upstream=False):
     global git_root
     git_root = repository.github.git_root
     
     logging.info('cd %s' % git_root)
     os.chdir(git_root)
 
-    new_files, all_files = get_branch_files(repository)
+    new_files, all_files = get_branch_files(repository, check_upstream)
     file_info = get_crowdin_file_info(repository)
 
     return new_files, all_files, file_info
@@ -151,9 +144,6 @@ def check_file_lists(repository, new_files, all_files):
             continue
 
         target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if os.path.isfile(target_file):
-            os.remove(target_file)
 
         if not os.path.exists(target_file):
             continue
@@ -181,30 +171,50 @@ def check_file_lists(repository, new_files, all_files):
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository):
-    logging.info('step 1: get repository state')
-    new_files, all_files, file_info = get_repository_state(repository)
+def update_repository(repository, check_upstream=False, create_issues=False):
+    step_number = 1
 
-    logging.info('step 2: download current translations')
+    logging.info('step %d: get repository state for translation download' % step_number)
+    step_number = step_number + 1
+
+    new_files, all_files, file_info = get_repository_state(repository, check_upstream)
+
+    logging.info('step %d: download current translations' % step_number)
+    step_number = step_number + 1
+
     crowdin_download_translations(repository, all_files, [], file_info)
 
-    logging.info('step 3: checking current translations for known errors')
-    check_file_lists(repository, new_files, all_files)
-    
-    logging.info('step 4: add new files to crowdin')
-    old_file_info, file_info = update_sources(repository, new_files)
+    logging.info('step %d: check current translations for known errors' % step_number)
+    step_number = step_number + 1
 
-    if False:
-        logging.info('step 5: generate github issues')
+    check_file_lists(repository, new_files, all_files)
+
+    if check_upstream:
+        logging.info('step %d: check upstream for source file updates' % step_number)
+        step_number = step_number + 1
+
+        old_file_info, file_info = update_sources(repository, new_files)
+    
+    if create_issues:
+        logging.info('step %d: generate github issues' % step_number)
+        step_number = step_number + 1
+
         init_issues(repository, all_files, file_info)
 
-        logging.info('step 6: add updated translations to github')
-        update_translations(repository, all_files)
+    logging.info('step %d: add updated translations to github' % step_number)
+    step_number = step_number + 1
 
-        logging.info('step 8: update github project')
+    update_translations(repository, all_files)
+
+    if create_issues:
+        logging.info('step %d: update github project' % step_number)
+        step_number = step_number + 1
+
         update_translation_issues(repository, file_info)
 
-    logging.info('step 9: download translation memory and glossary')
+    logging.info('step %d: download translation memory and glossary' % step_number)
+    step_number = step_number + 1
+
     save_translation_memory(repository)
     save_glossary(repository)
 
