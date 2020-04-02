@@ -406,6 +406,15 @@ def delete_code_translations(repository, file_name, file_info):
             x.find_parent('code') is not None or x.find_parent('pre') is not None or \
             x.find_parent(attrs={'id': 'front-matter'}) is not None
 
+    def is_rst_directive(x):
+        return x.text and ( \
+            x.text.find('====') != -1 or x.text.find('----') != -1 or \
+            x.text == '..' or x.text.find('::') != -1 or x.text.find(':') == 0 or \
+            x.text.find(':doc:') != -1 or x.text.find(':ref:') != -1 or \
+            x.text.lower() == x.text or \
+            x.text[-3:] == '.md' or x.text[-4:] == '.rst' \
+        )
+
     def hide_translation(translation_id, response_data):
         if not response_data['translation']['hidden']:
             crowdin_http_request(
@@ -415,9 +424,14 @@ def delete_code_translations(repository, file_name, file_info):
     def is_auto_translation(x):
         return x['user']['login'] == 'is-user'
 
-    has_suggestions = process_suggestions(
-        repository, crowdin_file_name, file_info,
-        is_within_code_tag, hide_translation, is_auto_translation)
+    if file_name[-4:] == '.rst':
+        has_suggestions = process_suggestions(
+            repository, crowdin_file_name, file_info,
+            is_rst_directive, hide_translation, is_auto_translation)
+    else:
+        has_suggestions = process_suggestions(
+            repository, crowdin_file_name, file_info,
+            is_within_code_tag, hide_translation, is_auto_translation)
 
     if not has_suggestions:
         return False
@@ -442,6 +456,9 @@ def pre_translate(repository, translation_needed, file_info):
     
     if len(translation_files) == 0:
         return
+
+    for file in translation_files.keys():
+        delete_code_translations(repository, file, file_info)
 
     translation_crowdin_files = translation_files.values()
     

@@ -52,7 +52,7 @@ def is_translation_eligible(repository, file, language_id):
 
     if file.find(prefix) == 0:
         if file[0:3] == language_id + '/' or file.find('/' + language_id + '/') != -1:
-            if file[-9:] == '.markdown' or file[-3:] == '.md' or file[-5:] == '.html':
+            if file[-9:] == '.markdown' or file[-3:] == '.md' or file[-5:] == '.html' or file[-4:] == '.rst':
                 return True
 
     return False

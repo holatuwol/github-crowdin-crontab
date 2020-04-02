@@ -68,8 +68,11 @@ def update_sources(repository, new_files):
     if repository.crowdin.delete_enabled:
         for folder in get_root_folders(repository, new_files):
             pre_translate_folder(repository, folder, new_files, file_info)
+    else:
+        for file in new_files:
+            delete_code_translations(repository, file, file_info)
 
-        crowdin_download_translations(repository, new_files, new_files, file_info)
+    crowdin_download_translations(repository, new_files, new_files, file_info)
 
     return old_file_info, file_info
 
@@ -104,7 +107,7 @@ def update_translations(repository, all_files):
     now = datetime.now()
 
     for file in all_files:
-        if file[-3:] == '.md':
+        if file[-3:] == '.md' or file[-4:] == '.rst':
             continue
 
         md_file = file[:-9] + '.md'
