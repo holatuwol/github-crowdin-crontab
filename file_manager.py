@@ -50,6 +50,8 @@ def is_translation_eligible(repository, file, language_id):
     else:
         prefix = repository.github.single_folder + '/'
 
+    prefix = language_id + '/' + prefix[3:] if prefix[0:3] == 'en/' else file.replace('/en/', '/%s/' % language_id)
+
     if file.find(prefix) == 0:
         if file[0:3] == language_id + '/' or file.find('/' + language_id + '/') != -1:
             if file[-9:] == '.markdown' or file[-3:] == '.md' or file[-5:] == '.html' or file[-4:] == '.rst':

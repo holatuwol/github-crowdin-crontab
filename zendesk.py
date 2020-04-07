@@ -192,7 +192,7 @@ def add_category_articles(articles, categories, category_name, sections, article
         date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
         url_name = article['html_url'][article['html_url'].rfind('/'):]
 
-        return 'en/%s/%s/%s%s.html' % (category_name, section_path, date_folder, url_name)
+        return 'en/%s%s/%s%s.html' % (category_name, section_path, date_folder, url_name)
 
     article_paths.update({
         str(article['id']): get_category_article_path(article)

@@ -23,8 +23,8 @@ def _crowdin(*args, stderr=PIPE):
 
 # Use "pandoc" to disable word wrapping to improve machine translations.
 
-def _pandoc(filename, *args):
-    with open(filename, 'r') as f:
+def _pandoc(source_file, target_file, *args):
+    with open(source_file, 'r') as f:
         lines = f.readlines()
 
         title_pos = -1
@@ -36,8 +36,22 @@ def _pandoc(filename, *args):
             elif line.find('[TOC') == 0:
                 toc_pos = i
 
-        head_lines = ''.join(lines[0:max(title_pos, toc_pos)+1])
-        tail_lines = ''.join(lines[max(title_pos, toc_pos)+1:])
+        if source_file == target_file:
+            head_lines = ''.join(lines[0:max(title_pos, toc_pos)+1])
+            tail_lines = ''.join(lines[max(title_pos, toc_pos)+1:])
+        else:
+            head_lines = None
+
+            if title_pos == -1:
+                tail_lines = ''.join(lines[max(title_pos, toc_pos)+1:])
+            else:
+                tail_lines = lines[title_pos] + '\n' + ''.join(lines[max(title_pos, toc_pos)+1:])
+
+            # '@app-ref@'
+            # '@ide@'
+            # '@platform-ref@'
+            # '@product-ver@'
+            # '@product@'
 
     cmd = ['pandoc'] + list(args)
 
@@ -46,9 +60,11 @@ def _pandoc(filename, *args):
 
     nowrap_lines = out.decode('UTF-8', 'replace')
 
-    with open(filename, 'w') as f:
-        f.write(head_lines)
-        f.write('\n')
+    with open(target_file, 'w') as f:
+        if head_lines is not None:
+            f.write(head_lines)
+            f.write('\n')
+
         f.write(nowrap_lines)
 
 # Generate a "crowdin.yaml" file to tell the CLI what to do.
@@ -97,7 +113,7 @@ def crowdin_upload_sources(repository, new_files):
         extension = file[file.rfind('.'):]
 
         if extension == '.md' or extension == '.markdown':
-            _pandoc(file, '--from=gfm', '--to=gfm', '--wrap=none')
+            _pandoc(file, file, '--from=gfm', '--to=gfm', '--wrap=none')
 
             with open(file, 'r') as f:
                 file_content = f.read()
@@ -107,8 +123,13 @@ def crowdin_upload_sources(repository, new_files):
             with open(file, 'w') as f:
                 f.write(file_content)
 
-    if len(new_files) > 0:
-        configure_crowdin(repository, new_files)
+    df = pd.read_csv('%s/ignore.csv' % initial_dir)
+    ignore_files = set(df[df['repository'] == repository.github.upstream]['file'].values)
+    upload_files = [file for file in new_files if file not in ignore_files]
+
+    if len(upload_files) > 0:
+        configure_crowdin(repository, upload_files)
+
         _crowdin('upload', 'sources')
 
     git.reset('--hard')
@@ -116,6 +137,30 @@ def crowdin_upload_sources(repository, new_files):
     after_upload = get_crowdin_file_info(repository)
     
     return before_upload, after_upload
+
+def crowdin_download_missing_translations(repository, all_files, file_info):
+    missing_files = []
+
+    for file in all_files:
+        crowdin_file = get_crowdin_file(repository, file)
+
+        if crowdin_file not in file_info:
+            continue
+
+        metadata = file_info[crowdin_file]
+
+        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+
+        if not os.path.isfile('%s/%s' % (repository.github.git_root, target_file)):
+            missing_files.append(file)
+    
+    if len(missing_files) == 0:
+        return
+
+    os.chdir(repository.github.git_root)
+    configure_crowdin(repository, missing_files)
+    _crowdin('download', '-l', 'ja')
+    os.chdir(initial_dir)
 
 def crowdin_download_translations(repository, all_files, new_files, file_info):
     updated_files = list(new_files)
