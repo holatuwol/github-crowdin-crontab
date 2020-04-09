@@ -1,4 +1,5 @@
 from crowdin import _pandoc
+from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files
 import git
 import os
@@ -14,11 +15,59 @@ def get_title(file):
     return None
 
 def add_mt_disclaimers(repository, file_info):
-    disclaimer_text = '''
-<p class="alert alert-info"><span class="wysiwyg-color-blue120">
-ファストトラック記事は、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、<a href="mailto:support-content-jp@liferay.com">こちら</a>までご連絡ください。
-</span></p>
-'''
+    now = datetime.now()
+
+    disclaimer_text = '<p class="alert alert-info"><span class="wysiwyg-color-blue120">ファストトラック記事は、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、<a href="mailto:support-content-jp@liferay.com">こちら</a>までご連絡ください。</span></p>'
+
+    os.chdir(repository.github.git_root)
+
+    root_folder = repository.github.single_folder \
+        if repository.github.single_folder is not None else repository.github.project_folder
+
+    for file in get_eligible_files(repository, git.ls_files(root_folder), 'en'):
+        crowdin_file = get_crowdin_file(repository, file)
+
+        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+
+        if not os.path.isfile('%s/%s' % (repository.github.git_root, target_file)):
+            if target_file[-9:] == '.markdown':
+                target_file = target_file[:-9] + '.md'
+            elif target_file[-3:] == '.md':
+                target_file = target_file[:-3] + '.markdown'
+
+            if not os.path.isfile('%s/%s' % (repository.github.git_root, target_file)):
+                continue
+
+        if crowdin_file not in file_info or file_info[crowdin_file]['translated'] == file_info[crowdin_file]['approved']:
+            continue
+
+        has_disclaimer = False
+        title_pos = -1
+
+        with open(target_file, 'r') as f:
+            lines = f.readlines()
+
+            for i, line in enumerate(lines):
+                if title_pos == -1 and line.find('#') == 0:
+                    title_pos = i
+
+                if line.strip() == disclaimer_text:
+                    has_disclaimer = True
+
+        if not has_disclaimer:
+            content = '%s\n%s\n%s' % (''.join(lines[:title_pos+1]), disclaimer_text, ''.join(lines[title_pos+1:]))
+
+            with open(target_file, 'w') as f:
+                f.write(content)
+
+            git.add(target_file)
+
+    git.commit('-m', 'Added machine translation disclaimer %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
+
+    os.chdir(initial_dir)
+
+def generate_html_files(repository, file_info):
+    now = datetime.now()
 
     os.chdir(repository.github.git_root)
 
@@ -46,16 +95,9 @@ def add_mt_disclaimers(repository, file_info):
 
         _pandoc(target_file, html_file, '--from=gfm', '--to=html')
 
-        if crowdin_file in file_info and file_info[crowdin_file]['translated'] == file_info[crowdin_file]['approved']:
-            continue
+        git.add(html_file)
 
-        with open(html_file, 'r') as f:
-            lines = f.readlines()
-
-            content = '%s%s\n%s' % (lines[0], disclaimer_text, ''.join(lines[1:]))
-
-        with open(html_file, 'w') as f:
-            f.write(content)
+    git.commit('-m', 'Updated pandoc conversion %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
 
     os.chdir(initial_dir)
 
@@ -118,7 +160,9 @@ def get_article_id(file, title, category_articles):
     return None
 
 def get_translation_target_articles(domain, repository, file_info):
-    titles = add_mt_disclaimers(repository, file_info)
+    add_mt_disclaimers(repository, file_info)
+
+    titles = generate_html_files(repository, file_info)
 
     categories = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
     sections = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')

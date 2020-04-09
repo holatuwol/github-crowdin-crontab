@@ -395,7 +395,7 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
             response_data = json.loads(response_content.decode('utf-8'))['data']
             raw_suggestions = response_data['suggestions']
         except:
-            logging.error('Error trying to parse phrase %s for file %s' (translation_id, file_name))
+            logging.error('Error trying to parse phrase %s for file %s' (translation_id, crowdin_file_name))
             raw_suggestions = []
         
 

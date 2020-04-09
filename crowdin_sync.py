@@ -58,11 +58,6 @@ def cleanup_files(repository, all_files, old_file_info, new_file_info):
     return update_sources(repository, to_upload)
 
 def update_sources(repository, new_files):
-    git.checkout(repository.github.branch)
-    
-    if repository.github.upstream:
-        git.rebase('upstream/%s' % repository.github.branch)
-
     old_file_info, file_info = crowdin_upload_sources(repository, new_files)
 
     if repository.crowdin.delete_enabled:
@@ -196,7 +191,14 @@ def update_repository(repository, check_upstream=False, create_issues=False):
         logging.info('step %d: check upstream for source file updates' % step_number)
         step_number = step_number + 1
 
-        old_file_info, file_info = update_sources(repository, new_files)
+    git.checkout(repository.github.branch)
+
+    if repository.github.upstream:
+        git.rebase('upstream/%s' % repository.github.branch)
+
+    logging.info('step %d: add source files to crowdin' % step_number)
+
+    old_file_info, file_info = update_sources(repository, new_files)
     
     if create_issues:
         logging.info('step %d: generate github issues' % step_number)
