@@ -1,3 +1,4 @@
+from collections import defaultdict
 from crowdin import delete_translation_folder
 from crowdin_sync import update_repository
 from datetime import datetime
@@ -114,7 +115,7 @@ def get_zendesk_articles(domain):
     articles = {}
 
     try:
-        with open('%s/articles.json' % initial_dir, 'r') as f:
+        with open('%s/articles_%s.json' % (initial_dir, domain), 'r') as f:
             articles = json.load(f)
     except:
         pass
@@ -137,37 +138,43 @@ def get_zendesk_articles(domain):
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
-    with open('articles.json', 'w') as f:
+    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     return articles
 
-def update_zendesk_articles(repository, domain):
-    articles = download_zendesk_articles(repository, domain)
+def update_zendesk_articles(repositories, domain):
+    git_roots = set([repository.github.git_root for repository in repositories])
 
-    new_translations = set()
+    for git_root in git_roots:
+        articles = download_zendesk_articles(git_root, domain)
 
-    dest_folder = repository.crowdin.dest_folder
+    dest_folders = defaultdict(list)
 
-    delete_translation_folder(repository, dest_folder)
+    for repository in repositories:
+        dest_folders[repository.crowdin.dest_folder].append(repository)
 
-    new_files, all_files, file_info = update_repository(repository)
+    for dest_folder, repositories in dest_folders.items():
+        delete_translation_folder(repository, dest_folder)
 
-    os.chdir(repository.github.git_root)
+        for repository in repositories:
+            new_files, all_files, file_info = update_repository(repository)
 
-    for file in all_files:
-        article_id = file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
-        article = articles[article_id]
-        
-        if update_zendesk_translation(domain, article, file):
-            target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-            git.add(target_file)
+            os.chdir(repository.github.git_root)
 
-    git.commit('-m', 'Translated new articles: %s' % datetime.now())
+            for file in all_files:
+                article_id = file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
+                article = articles[article_id]
 
-    os.chdir(initial_dir)
+                if update_zendesk_translation(domain, article, file):
+                    target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+                    git.add(target_file)
 
-    delete_translation_folder(repository, repository.crowdin.dest_folder)
+            git.commit('-m', 'Translated new articles: %s' % datetime.now())
+
+            os.chdir(initial_dir)
+
+            delete_translation_folder(repository, dest_folder)
 
     return articles
 
@@ -189,7 +196,7 @@ def add_category_articles(articles, categories, category_name, sections, article
 
     def get_category_article_path(article):
         section_path = section_paths[article['section_id']]
-        date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
+        date_folder = pd.to_datetime(article['created_at']).strftime('%G_w%V')
         url_name = article['html_url'][article['html_url'].rfind('/'):]
 
         return 'en/%s%s/%s%s.html' % (category_name, section_path, date_folder, url_name)
@@ -207,7 +214,7 @@ def add_label_articles(articles, label_name, article_paths):
     section_path = label_name
 
     def get_fast_track_article_path(article):
-        date_folder = pd.to_datetime(article['edited_at']).strftime('%Y%m%d_%H00')
+        date_folder = pd.to_datetime(article['created_at']).strftime('%G_w%V')
         url_name = article['html_url'][article['html_url'].rfind('/'):]
 
         return 'en/%s/%s%s.html' % (section_path, date_folder, url_name)
@@ -220,7 +227,7 @@ def add_label_articles(articles, label_name, article_paths):
                     label_name in article['label_names']
     })
 
-def download_zendesk_articles(repository, domain):
+def download_zendesk_articles(git_root, domain):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -239,7 +246,7 @@ def download_zendesk_articles(repository, domain):
     add_label_articles(articles, 'Knowledge Base', article_paths)
     add_label_articles(articles, 'Fast Track', article_paths)
 
-    os.chdir(repository.github.git_root)
+    os.chdir(git_root)
 
     for article_id, article_path in article_paths.items():
         article_file_name = article_path
@@ -263,9 +270,20 @@ def download_zendesk_articles(repository, domain):
 
     return articles
 
+def requires_update(article):
+    if 'ja' not in article['label_names']:
+        return True
+
+    if 'mt' not in article['label_names']:
+        return False
+
+    if 'ja' not in article['outdated_locales']:
+        return False
+
+    return True
+
 def update_zendesk_translation(domain, article, file):
-    if 'ja' in article['label_names'] and 'ja' not in article['outdated_locales']:
-        print('%s translation already exists on zendesk' % file)
+    if not requires_update(article):
         return False
 
     target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
@@ -310,10 +328,11 @@ def update_zendesk_translation(domain, article, file):
         zendesk_json_request(domain, api_path, 'translation', 'PUT', json_params)
 
     article['label_names'].append('ja')
+    article['label_names'].append('mt')
 
     json_params = {
         'article': {
-        	'user_segment_id': article['user_segment_id'],
+            'user_segment_id': article['user_segment_id'],
             'label_names': article['label_names']
         }
     }

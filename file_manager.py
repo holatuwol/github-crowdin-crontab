@@ -8,13 +8,15 @@ def get_folders(files):
 
 def get_root_folders(repository, candidate_files):
     if repository.github.single_folder is None:
-        prefix = repository.github.project_folder + '/'
+        base_folder = repository.github.project_folder
     else:
-        prefix = repository.github.single_folder + '/'
+        base_folder = repository.github.single_folder
+
+    prefix = base_folder + '/'
 
     matching_folders = [
         folder for folder in get_folders(candidate_files)
-            if folder.find(prefix) == 0
+            if folder.find(prefix) == 0 or folder == base_folder
     ]
 
     root_folders = []

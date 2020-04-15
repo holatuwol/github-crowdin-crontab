@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 from collections import defaultdict
+from datetime import datetime, timedelta
 import git
 from file_manager import get_local_file, get_crowdin_file, get_root_folders
 import json
@@ -10,16 +11,33 @@ from repository import initial_dir
 import requests
 from scrape_liferay import authenticate, session
 from subprocess import Popen, PIPE
+import time
+
+next_export = None
 
 def _crowdin(*args, stderr=PIPE):
+    global next_export
+
     cmd = ['crowdin'] + list(args)
+
+    if args[0] == 'download' and next_export is not None:
+        sleep_time = (next_export - datetime.now()).total_seconds()
+
+        if sleep_time > 0:
+            logging.info('Waiting %d minutes for next available export slot' % (sleep_time / 60))
+            time.sleep(sleep_time)
 
     logging.info(' '.join(cmd))
 
     pipe = Popen(cmd, stdout=PIPE, stderr=stderr)
     out, err = pipe.communicate()
 
-    return out.decode('UTF-8', 'replace').strip()
+    result = out.decode('UTF-8', 'replace').strip()
+
+    if args[0] == 'download':
+        next_export = datetime.now() + timedelta(minutes=30)
+
+    return result
 
 # Use "pandoc" to disable word wrapping to improve machine translations.
 
@@ -158,8 +176,11 @@ def crowdin_download_missing_translations(repository, all_files, file_info):
         return
 
     os.chdir(repository.github.git_root)
+
     configure_crowdin(repository, missing_files)
+
     _crowdin('download', '-l', 'ja')
+
     os.chdir(initial_dir)
 
 def crowdin_download_translations(repository, all_files, new_files, file_info):
@@ -390,14 +411,14 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
     for translation_id in translation_ids:
         response_content = crowdin_http_request(
             repository, '/backend/translation/phrase', translation_id=translation_id)
+        response_data = None
 
         try:
             response_data = json.loads(response_content.decode('utf-8'))['data']
             raw_suggestions = response_data['suggestions']
         except:
-            logging.error('Error trying to parse phrase %s for file %s' (translation_id, crowdin_file_name))
+            logging.error('Error trying to parse phrase %s for file %s' % (translation_id, crowdin_file_name))
             raw_suggestions = []
-        
 
         if type(raw_suggestions) is dict:
             suggestions = [
@@ -422,7 +443,7 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
                 repository, '/backend/suggestions/delete', translation_id=translation_id,
                 plural_id='-1', suggestion_id=suggestion['id'])
 
-        if translation_post_process is not None:
+        if translation_post_process is not None and response_data is not None:
             translation_post_process(translation_id, response_data)
 
 # Clear out auto-translations so we have a better sense of progress
