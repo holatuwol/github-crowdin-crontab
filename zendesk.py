@@ -155,8 +155,6 @@ def update_zendesk_articles(repositories, domain):
         dest_folders[repository.crowdin.dest_folder].append(repository)
 
     for dest_folder, repositories in dest_folders.items():
-        delete_translation_folder(repository, dest_folder)
-
         for repository in repositories:
             new_files, all_files, file_info = update_repository(repository)
 
@@ -173,8 +171,6 @@ def update_zendesk_articles(repositories, domain):
             git.commit('-m', 'Translated new articles: %s' % datetime.now())
 
             os.chdir(initial_dir)
-
-            delete_translation_folder(repository, dest_folder)
 
     return articles
 

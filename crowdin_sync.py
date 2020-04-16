@@ -60,14 +60,31 @@ def cleanup_files(repository, all_files, old_file_info, new_file_info):
 def update_sources(repository, new_files):
     old_file_info, file_info = crowdin_upload_sources(repository, new_files)
 
+    update_files = set(new_files)
+
+    for crowdin_file_name, metadata in [(key, value) for key, value in file_info.items() if key.find(repository.crowdin.single_folder) == 0 and 'id' in value]:
+        if metadata['translated'] == metadata['phrases']:
+            continue
+
+        file = get_local_file(repository, crowdin_file_name)
+
+        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+
+        if os.path.isfile(target_file):
+            os.remove(target_file)
+
+        update_files.add(file)
+
     if repository.crowdin.delete_enabled:
-        for folder in get_root_folders(repository, new_files):
-            pre_translate_folder(repository, folder, new_files, file_info)
+        for folder in get_root_folders(repository, update_files):
+            file_info = pre_translate_folder(repository, folder, update_files, file_info)
     else:
-        for file in new_files:
+        for file in update_files:
             delete_code_translations(repository, file, file_info)
 
-    crowdin_download_translations(repository, new_files, new_files, file_info)
+        file_info = get_crowdin_file_info(repository)
+
+    crowdin_download_translations(repository, update_files, update_files, file_info)
 
     return old_file_info, file_info
 

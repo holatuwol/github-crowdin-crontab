@@ -5,13 +5,17 @@ import git
 from file_manager import get_local_file, get_crowdin_file, get_root_folders
 import json
 import logging
+import math
 import os
+import numpy as np
 import pandas as pd
+import random
 from repository import initial_dir
 import requests
 from scrape_liferay import authenticate, session
 from subprocess import Popen, PIPE
 import time
+import urllib
 
 next_export = None
 
@@ -152,7 +156,10 @@ def crowdin_upload_sources(repository, new_files):
 
     git.reset('--hard')
 
-    after_upload = get_crowdin_file_info(repository)
+    if len(upload_files) > 0:
+        after_upload = get_crowdin_file_info(repository)
+    else:
+        after_upload = before_upload
     
     return before_upload, after_upload
 
@@ -269,7 +276,9 @@ def delete_translation(repository, file):
 
     return crowdin_request(repository, '/delete-file', 'POST', data)
 
-def delete_translation_folder(repository, folder):
+def delete_translation_folder(repository):
+    folder = repository.crowdin.single_folder
+
     logging.info('crowdin-api delete-directory %s' % folder)
 
     data = {
@@ -317,48 +326,76 @@ def get_crowdin_file_info(repository):
 
     return file_info
 
-# Send requests to CrowdIn to do automated translation (translation memory,
-# machine translation).
+# Send requests to CrowdIn to do automated machine translation.
 
-def translate_with_memory(repository, files):
-    data = {
-        'languages[]': ['ja'],
-        'files[]': files,
-        'method': 'tm',
-        'auto_approve_option': 0,
-        'import_duplicates': 1,
-        'apply_untranslated_strings_only': 1,
-        'perfect_match': 0,
-        'json': 1
-    }
+def wait_for_translation(repository):
+    while True:
+        response = crowdin_http_request(
+            repository, '/backend/project_actions/pre_translate_progress', 'GET')
 
-    return crowdin_request(repository, '/pre-translate', 'POST', data)
+        response_data = json.loads(response.decode('utf-8'))
 
-def translate_with_machine(repository, files):
-    data = {
-        'languages[]': ['ja'],
-        'files[]': files,
-        'method': 'mt',
-        'engine': 'google',
-        'json': 1
-    }
+        if not response_data['success'] or response_data['progress'] == 100:
+            return
 
-    return crowdin_request(repository, '/pre-translate', 'POST', data)
+        logging.info('crowdin-api pre-translate progress %d%%' % response_data['progress'])
 
-def crowdin_http_request(repository, path, **data):
-    get_data = { key: value for key, value in data.items() }
+        time.sleep(5)
 
-    get_data['project_id'] = repository.crowdin.project_id
-    get_data['target_language_id'] = '25'
+def translate_with_machine(repository, file_ids):
+    file_count = len(file_ids)
+    split_count = math.ceil(file_count / 20)
+    split_file_ids = np.array_split(list(file_ids), split_count)
 
-    query_string = '&'.join([key + '=' + str(value) for key, value in get_data.items()])
-    
-    url = 'https://www.crowdin.com%s?%s' % (path, query_string)
+    for i, subfile_ids in enumerate(split_file_ids):
+        logging.info('crowdin-api pre-translate (%d/%d)' % (i * 20, file_count))
 
-    session.cookies.set('csrf_token', 'abcdefghij', domain='.crowdin.com', path='/')
+        data = {
+            'project_id': repository.crowdin.project_id,
+            'engine': 'google-translate',
+            'approve_translated': '0',
+            'auto_approve_option': '0',
+            'import_duplicates': '0',
+            'apply_untranslated_strings_only': '1',
+            'match_relevance': '100',
+            'languages_list': '25',
+            'files_list': ','.join(subfile_ids)
+        }
+
+        response = crowdin_http_request(
+            repository, '/backend/project_actions/pre_translate', 'POST', **data)
+
+        response_data = json.loads(response.decode('utf-8'))
+
+        if response_data['success']:
+            wait_for_translation(repository)
+
+    logging.info('crowdin-api pre-translate (%d/%d)' % (file_count, file_count))
+
+csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
+
+def crowdin_http_request(repository, path, method, **data):
+    global csrf_token
+
+    if method == 'GET':
+        get_data = { key: value for key, value in data.items() }
+
+        get_data['project_id'] = repository.crowdin.project_id
+        get_data['target_language_id'] = '25'
+
+        query_string = '&'.join([urllib.parse.quote(key) + '=' + urllib.parse.quote(str(value)) for key, value in get_data.items()])
+        
+        url = 'https://crowdin.com%s?%s' % (path, query_string)
+    else:
+        url = 'https://crowdin.com%s' % path
+
+    session.cookies.set('csrf_token', csrf_token, domain='.crowdin.com', path='/')
 
     try:
-        r = session.get(url, headers={'x-csrf-token': 'abcdefghij'})
+        if method == 'GET':
+            r = session.get(url, headers={'x-csrf-token': csrf_token})
+        elif method == 'POST':
+            r = session.post(url, data=data, headers={'x-csrf-token': csrf_token})
 
         if r.url.find('/login') == -1:
             return r.content
@@ -366,26 +403,31 @@ def crowdin_http_request(repository, path, **data):
         pass
     
     logging.info('Session timed out, refreshing session')
-    r = session.get('https://accounts.crowdin.com/login')
+
+    continue_url = 'https://crowdin.com/%s/settings' % repository.crowdin.project_name
+    login_url = 'https://accounts.crowdin.com/login'
+
+    r = session.get(login_url)
     
     soup = BeautifulSoup(r.text, features='html.parser')
     token_input = soup.find('input', attrs={'name': '_token'})
     
     if token_input is None:
-        return crowdin_http_request(repository, path, **data)
+        return crowdin_http_request(repository, path, method, **data)
     
     data = {
         'email_or_login': git.config('crowdin.login'),
         'password': git.config('crowdin.password'),
+        'hash': 'files',
         'continue': url,
         'locale': 'en',
         'intended': '/auth/token',
         '_token': token_input.attrs['value']
     }
 
-    r = session.post('https://accounts.crowdin.com/login', data=data)
+    r = session.post(login_url, data=data)
     
-    return r.content
+    return crowdin_http_request(repository, path, method, **data)
 
 # Mass delete suggestions
 
@@ -393,7 +435,8 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
     file_id = file_info[crowdin_file_name]['id']
 
     response_content = crowdin_http_request(
-        repository, '/backend/phrases/phrases_as_html', file_id=file_id)
+        repository, '/backend/phrases/phrases_as_html', 'GET',
+        file_id=file_id)
 
     soup = BeautifulSoup(response_content, features='html.parser')   
 
@@ -410,7 +453,8 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
 
     for translation_id in translation_ids:
         response_content = crowdin_http_request(
-            repository, '/backend/translation/phrase', translation_id=translation_id)
+            repository, '/backend/translation/phrase', 'GET',
+            translation_id=translation_id)
         response_data = None
 
         try:
@@ -440,8 +484,8 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
         for suggestion in suggestions:
             logging.info('Deleting suggestion %s from user %s' % (suggestion['id'], suggestion['user']['login']))
             crowdin_http_request(
-                repository, '/backend/suggestions/delete', translation_id=translation_id,
-                plural_id='-1', suggestion_id=suggestion['id'])
+                repository, '/backend/suggestions/delete', 'GET',
+                translation_id=translation_id, plural_id='-1', suggestion_id=suggestion['id'])
 
         if translation_post_process is not None and response_data is not None:
             translation_post_process(translation_id, response_data)
@@ -484,8 +528,8 @@ def delete_code_translations(repository, file_name, file_info):
     def hide_translation(translation_id, response_data):
         if not response_data['translation']['hidden']:
             crowdin_http_request(
-                repository, '/backend/translation/change_visibility', translation_id=translation_id,
-                hidden=1)
+                repository, '/backend/translation/change_visibility', 'GET',
+                translation_id=translation_id, hidden=1)
 
     def is_auto_translation(x):
         return x['user']['login'] == 'is-user'
@@ -515,23 +559,22 @@ def pre_translate(repository, translation_needed, file_info):
     }
 
     translation_files = {
-        file: crowdin_file
+        file: file_info[crowdin_file]['id']
             for file, crowdin_file in candidate_files.items()
                 if crowdin_file in file_info
     }
-    
+
     if len(translation_files) == 0:
         return
 
-    for file in translation_files.keys():
+    for file, crowdin_file in sorted(translation_files.items()):
         delete_code_translations(repository, file, file_info)
 
-    translation_crowdin_files = translation_files.values()
+    translate_with_machine(repository, translation_files.values())
+
+    file_info = get_crowdin_file_info(repository)
     
-    translate_with_machine(repository, translation_crowdin_files)
-    
-    for file in translation_files.keys():
-        delete_code_translations(repository, file, file_info)
+    return get_crowdin_file_info(repository)
 
 def pre_translate_folder(repository, folder, candidate_files, file_info):
     prefix = folder + '/'
@@ -544,6 +587,7 @@ def pre_translate_folder(repository, folder, candidate_files, file_info):
         crowdin_file = get_crowdin_file(repository, file)
 
         if crowdin_file not in file_info:
+            logging.info('%s was not uploaded to crowdin' % crowdin_file)
             continue
 
         target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
@@ -552,10 +596,9 @@ def pre_translate_folder(repository, folder, candidate_files, file_info):
             translation_needed.append(file)
 
     if len(translation_needed) > 0:
-        logging.info('crowdin-api pre-translate %s' % folder)
-        pre_translate(repository, translation_needed, file_info)
+        file_info = pre_translate(repository, translation_needed, file_info)
 
-    return translation_needed
+    return file_info
 
 def get_orphaned_files(repository, update_result):
     new_files, all_files, file_info = update_result
