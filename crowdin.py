@@ -69,12 +69,6 @@ def _pandoc(source_file, target_file, *args):
             else:
                 tail_lines = lines[title_pos] + '\n' + ''.join(lines[max(title_pos, toc_pos)+1:])
 
-            # '@app-ref@'
-            # '@ide@'
-            # '@platform-ref@'
-            # '@product-ver@'
-            # '@product@'
-
     cmd = ['pandoc'] + list(args)
 
     pipe = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -126,6 +120,18 @@ def configure_crowdin(repository, files):
         files=config_json
     ))
 
+def fix_product_name_tokens(file):
+    with open(file, 'r') as f:
+        file_content = f.read()
+
+    file_content = file_content.replace('@<', '@').replace('@>', '@')
+
+    for token in ['@app-ref@', '@ide@', '@platform-ref@', '@product-ver@', '@product@']:
+        file_content = file_content.replace('@ %s @' % (token[1:-1]), token)
+
+    with open(file, 'w') as f:
+        f.write(file_content)
+
 # Wrapper functions to upload sources and download translations.
 
 def crowdin_upload_sources(repository, new_files):
@@ -137,13 +143,7 @@ def crowdin_upload_sources(repository, new_files):
         if extension == '.md' or extension == '.markdown':
             _pandoc(file, file, '--from=gfm', '--to=gfm', '--wrap=none')
 
-            with open(file, 'r') as f:
-                file_content = f.read()
-
-            file_content = file_content.replace('@<', '@').replace('@>', '@')
-
-            with open(file, 'w') as f:
-                f.write(file_content)
+            fix_product_name_tokens(file)
 
     df = pd.read_csv('%s/ignore.csv' % initial_dir)
     ignore_files = set(df[df['repository'] == repository.github.upstream]['file'].values)

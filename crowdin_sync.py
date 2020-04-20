@@ -1,4 +1,4 @@
-from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, get_crowdin_file_info, pre_translate_folder, save_glossary, save_translation_memory
+from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, fix_product_name_tokens, get_crowdin_file_info, pre_translate_folder, save_glossary, save_translation_memory
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders
 import git
@@ -133,6 +133,7 @@ def update_translations(repository, all_files):
 
         if os.path.isfile(target_file):
             git.add(target_file)
+            fix_product_name_tokens(target_file)
 
     git.commit('-m', 'Updated translations %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
 
