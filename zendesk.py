@@ -244,23 +244,20 @@ def download_zendesk_articles(repository, domain):
         else:
             print('Missing %s with path %s' % (article_id, article_path))
 
-    update_message = 'Downloaded new articles: %s' % datetime.now()
+    git.commit('-m', 'Downloaded new articles: %s' % datetime.now())
 
-    git.commit('-m', update_message)
-
-    refresh_paths = []
-
-    if git.log('-1', 'HEAD', '--pretty=%s').strip() == update_message:
-        refresh_paths = get_eligible_files(repository, git.show('--name-only', 'HEAD'), 'en')
+    refresh_paths = [
+        article_path for article_id, article_path in new_article_paths.items()
+            if requires_update(articles[article_id])
+    ]
 
     for article_id, article_path in new_article_paths.items():
         target_file = 'ja/' + article_path[3:]
 
-        if os.path.exists(target_file):
+        if os.path.exists(target_file) and os.path.getsize(target_file) > 0:
             continue
 
-        if 'mt' not in articles[article_id]['label_names']:
-            refresh_paths.append(article_path)
+        if 'ja' not in articles[article_id]['label_names']:
             continue
 
         translation = zendesk_get_request(domain, '/help_center/articles/%s/translations/ja.json' % article_id, 'translation')[0]
@@ -272,6 +269,57 @@ def download_zendesk_articles(repository, domain):
         git.add(target_file)
 
     git.commit('-m', 'Downloaded existing translation: %s' % datetime.now())
+
+    section_categories = {
+        section['id']: section['category_id']
+            for section in section_list
+    }
+
+    new_section_ids = set([
+        articles[article_id]['section_id'] for article_id in new_article_paths.keys()
+    ])
+
+    new_category_ids = set([
+        section_categories[section_id] for section_id in new_section_ids
+    ])
+
+    new_section_titles = {
+        section_id: zendesk_get_request(domain, '/help_center/sections/%s/translations/ja.json' % section_id, 'translation')[0]['title']
+            for section_id in new_section_ids
+    }
+
+    new_category_titles = {
+        category_id: zendesk_get_request(domain, '/help_center/categories/%s/translations/ja.json' % category_id, 'translation')[0]['title']
+            for category_id in new_category_ids
+    }
+
+    article_metadata = {}
+
+    for article_id, article_path in new_article_paths.items():
+        article = articles[article_id]
+        title = article['title']
+
+        target_file = 'ja/' + article_path[3:]
+
+        if not os.path.isfile(target_file):
+            continue
+
+        with open(target_file, 'r') as f:
+            lines = f.readlines()
+            title = lines[0][4:-6]
+            
+        article_metadata[article_id] = {
+            'category': new_category_titles[section_categories[article['section_id']]],
+            'section': new_section_titles[article['section_id']],
+            'title': title,
+            'created': article['created_at'],
+            'updated': article['updated_at'],
+            'outdated': 'ja' in article['outdated_locales'],
+            'mt': 'mt' in article['label_names']
+        }
+
+    with open('translations.json', 'w') as f:
+        json.dump(article_metadata, f, separators=(',', ':'))
 
     os.chdir(initial_dir)
 

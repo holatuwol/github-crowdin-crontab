@@ -1,9 +1,20 @@
 #!/bin/bash
 
+set -o xtrace
+
 docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
 
-docker run --name crowdin --volume /ephemeral/crowdin:/home/jovyan/crowdin \
+docker run --name crowdin \
+--volume /ephemeral/crowdin:/home/jovyan/crowdin \
 --detach crowdin start-notebook.sh --NotebookApp.token=''
+
+docker exec -it crowdin mkdir -p /home/jovyan/.ssh/
+
+docker cp ${HOME}/.ssh/id_rsa crowdin:/home/jovyan/.ssh/
+docker exec -u root -it crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa
+
+docker cp ${HOME}/.ssh/id_rsa.pub crowdin:/home/jovyan/.ssh/
+docker exec -u root -it crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa.pub
 
 for config in $(git config --list | cut -d'=' -f 1); do
 	docker exec crowdin /bin/bash -c "git config --global ${config} '$(git config ${config})'"
@@ -13,3 +24,6 @@ docker exec crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cr
 
 docker stop crowdin
 docker rm -v crowdin
+
+cd /ephemeral/crowdin/zendesk-articles
+git push origin master
