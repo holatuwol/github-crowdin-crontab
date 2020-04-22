@@ -1,7 +1,7 @@
 from collections import defaultdict
-from crowdin import delete_translation_folder
 from crowdin_sync import update_repository
 from datetime import datetime
+from file_manager import get_eligible_files
 import git
 import json
 import logging
@@ -143,128 +143,159 @@ def get_zendesk_articles(domain):
 
     return articles
 
-def update_zendesk_articles(repositories, domain):
-    git_roots = set([repository.github.git_root for repository in repositories])
+def update_zendesk_articles(repository, domain):
+    articles, refresh_paths = download_zendesk_articles(repository, domain)
+    dest_folder = repository.crowdin.dest_folder
 
-    for git_root in git_roots:
-        articles = download_zendesk_articles(git_root, domain)
+    new_files, all_files, file_info = update_repository(repository, refresh_paths)
 
-    dest_folders = defaultdict(list)
+    os.chdir(repository.github.git_root)
 
-    for repository in repositories:
-        dest_folders[repository.crowdin.dest_folder].append(repository)
+    for file in all_files:
+        article_id = file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
+        article = articles[article_id]
 
-    for dest_folder, repositories in dest_folders.items():
-        for repository in repositories:
-            new_files, all_files, file_info = update_repository(repository)
+        if update_zendesk_translation(domain, article, file):
+            target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+            git.add(target_file)
 
-            os.chdir(repository.github.git_root)
+    git.commit('-m', 'Translated new articles: %s' % datetime.now())
 
-            for file in all_files:
-                article_id = file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
-                article = articles[article_id]
-
-                if update_zendesk_translation(domain, article, file):
-                    target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-                    git.add(target_file)
-
-            git.commit('-m', 'Translated new articles: %s' % datetime.now())
-
-            os.chdir(initial_dir)
+    os.chdir(initial_dir)
 
     return articles
 
-def add_category_articles(articles, categories, category_name, sections, article_paths):
-    category_id = None
-
-    for category in categories:
-        if category['name'] == category_name:
-            category_id = category['id']
-
-    if category_id is None:
-        return
-
-    section_paths = {
-        section['id']: section['html_url'][section['html_url'].rfind('/'):]
-            for section in sections
-                if section['category_id'] == category_id
-    }
-
-    def get_category_article_path(article):
-        section_path = section_paths[article['section_id']]
-        date_folder = pd.to_datetime(article['created_at']).strftime('%G_w%V')
-        url_name = article['html_url'][article['html_url'].rfind('/'):]
-
-        return 'en/%s%s/%s%s.html' % (category_name, section_path, date_folder, url_name)
-
-    article_paths.update({
-        str(article['id']): get_category_article_path(article)
-            for article in articles.values()
-                if article['section_id'] in section_paths and
-                    not article['draft'] and
-                    article['locale'] == 'en-us' and
-                    'Fast Track' not in article['label_names']
-    })
-
-def add_label_articles(articles, label_name, article_paths):
-    section_path = label_name
-
-    def get_fast_track_article_path(article):
-        date_folder = pd.to_datetime(article['created_at']).strftime('%G_w%V')
-        url_name = article['html_url'][article['html_url'].rfind('/'):]
-
-        return 'en/%s/%s%s.html' % (section_path, date_folder, url_name)
-
-    article_paths.update({
-        str(article['id']): get_fast_track_article_path(article)
-            for article in articles.values()
-                if not article['draft'] and
-                    article['locale'] == 'en-us' and
-                    label_name in article['label_names']
-    })
-
-def download_zendesk_articles(git_root, domain):
+def download_zendesk_articles(repository, domain):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
 
     # Determine the proper folder structure
 
-    categories = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
-    sections = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')
+    category_list = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
+    section_list = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')
+
+    category_names = {
+        category['id']: category['name'] for category in category_list
+    }
+
+    section_paths = {
+        section['id']: '%s%s' % (category_names[section['category_id']], section['html_url'][section['html_url'].rfind('/'):])
+            for section in section_list
+    }
 
     articles = get_zendesk_articles(domain)
-    article_paths = {}
 
-    add_category_articles(articles, categories, 'Announcements', sections, article_paths)
-    add_category_articles(articles, categories, 'Liferay DXP 7.1 Admin Guide', sections, article_paths)
+    def get_category_article_path(article):
+        section_path = section_paths[article['section_id']]
+        date_folder = pd.to_datetime(article['created_at']).strftime('%G_w%V')
+        url_name = article['html_url'][article['html_url'].rfind('/'):]
 
-    add_label_articles(articles, 'Knowledge Base', article_paths)
-    add_label_articles(articles, 'Fast Track', article_paths)
+        return 'en/%s/%s%s.html' % (section_path, date_folder, url_name)
 
-    os.chdir(git_root)
+    os.chdir(repository.github.git_root)
 
-    for article_id, article_path in article_paths.items():
-        article_file_name = article_path
-        article_folder = os.path.dirname(article_file_name)
+    old_article_paths = {
+        file[file.rfind('/')+1:file.find('-', file.rfind('/'))]: file
+             for file in git.ls_files('en/').split('\n')
+    }
 
-        if not os.path.exists(article_folder):
-            os.makedirs(article_folder)
+    new_article_paths = {
+        str(article['id']): get_category_article_path(article)
+            for article in articles.values()
+                if is_tracked_article(article, section_paths)
+    }
 
+    for article_id, article_path in new_article_paths.items():
+        os.makedirs(os.path.dirname(article_path), exist_ok=True)
+        os.makedirs('ja/' + os.path.dirname(article_path)[3:], exist_ok=True)
+
+    for article_id, new_article_path in new_article_paths.items():
+        if article_id not in old_article_paths:
+            continue
+
+        old_article_path = old_article_paths[article_id]
+
+        if old_article_path == new_article_path:
+            continue
+
+        if os.path.exists(old_article_path):
+            os.rename(old_article_path, new_article_path)
+            git.add(old_article_path)
+            git.add(new_article_path)
+
+        old_article_path = 'ja/' + old_article_path[3:]
+        new_article_path = 'ja/' + article_path[3:]
+
+        if os.path.exists(old_article_path):
+            os.rename(old_article_path, new_article_path)
+            git.add(old_article_path)
+            git.add(new_article_path)
+
+    git.commit('-m', 'Renamed articles: %s' % datetime.now())
+
+    for article_id, article_path in new_article_paths.items():
         if article_id in articles and articles[article_id]['body'] is not None:
-            with open(article_file_name, 'w', encoding='utf-8') as f:
+            with open(article_path, 'w', encoding='utf-8') as f:
                 f.write('<h1>%s</h1>\n' % articles[str(article_id)]['title'])
                 f.write(articles[str(article_id)]['body'])
 
-            git.add(article_file_name)
+            git.add(article_path)
         else:
             print('Missing %s with path %s' % (article_id, article_path))
 
-    git.commit('-m', 'Downloaded new articles: %s' % datetime.now())
+    update_message = 'Downloaded new articles: %s' % datetime.now()
+
+    git.commit('-m', update_message)
+
+    refresh_paths = []
+
+    if git.log('-1', 'HEAD', '--pretty=%s').strip() == update_message:
+        refresh_paths = get_eligible_files(repository, git.show('--name-only', 'HEAD'), 'en')
+
+    for article_id, article_path in new_article_paths.items():
+        target_file = 'ja/' + article_path[3:]
+
+        if os.path.exists(target_file):
+            continue
+
+        if 'mt' not in articles[article_id]['label_names']:
+            refresh_paths.append(article_path)
+            continue
+
+        translation = zendesk_get_request(domain, '/help_center/articles/%s/translations/ja.json' % article_id, 'translation')[0]
+
+        with open(target_file, 'w', encoding='utf-8') as f:
+            f.write('<h1>%s</h1>\n' % translation['title'])
+            f.write(translation['body'])
+
+        git.add(target_file)
+
+    git.commit('-m', 'Downloaded existing translation: %s' % datetime.now())
 
     os.chdir(initial_dir)
 
-    return articles
+    return articles, refresh_paths
+
+def is_tracked_article(article, section_paths=None):
+    if article['draft']:
+        return False
+
+    if article['locale'] != 'en-us':
+        return False
+
+    if section_paths is None:
+        return True
+
+    section_path = section_paths[article['section_id']]
+    category_name = section_path[0:section_path.find('/')]
+    label_names = article['label_names']
+
+    if category_name != 'Announcements' and category_name != 'Knowledge Base':
+        if 'Knowledge Base' not in label_names and 'Fast Track' not in label_names:
+            return False
+
+    return True
 
 def requires_update(article):
     if 'ja' not in article['label_names']:
@@ -283,6 +314,9 @@ def update_zendesk_translation(domain, article, file):
         return False
 
     target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+
+    if not os.path.exists(target_file):
+        return False
 
     api_path = '/help_center/articles/%s/translations/missing.json' % article['id']
 

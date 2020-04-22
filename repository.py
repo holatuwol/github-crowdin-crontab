@@ -64,7 +64,7 @@ def get_subrepositories(repository):
     return [
         TranslationRepository(
             GitHubRepository(github.git_root, github.origin, github.upstream, github.branch, github.project_folder, '%s/%s' % (github.single_folder, sub_folder)),
-            CrowdInRepository(crowdin.project_folder, crowdin.project_name, crowdin.api_key, crowdin.dest_folder, crowdin.delete_enabled, '%s/%s' % (crowdin.single_folder, sub_folder))
+            CrowdInRepository(crowdin.project_id, crowdin.project_name, crowdin.api_key, crowdin.dest_folder, crowdin.delete_enabled, '%s/%s' % (crowdin.single_folder, sub_folder))
         )
         for sub_folder in sorted(os.listdir(base_folder))
     ]

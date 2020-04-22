@@ -1,0 +1,15 @@
+#!/bin/bash
+
+docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
+
+docker run --name crowdin --volume /ephemeral/crowdin:/home/jovyan/crowdin \
+--detach crowdin start-notebook.sh --NotebookApp.token=''
+
+for config in $(git config --list | cut -d'=' -f 1); do
+	docker exec crowdin /bin/bash -c "git config --global ${config} '$(git config ${config})'"
+done
+
+docker exec crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py"
+
+docker stop crowdin
+docker rm -v crowdin

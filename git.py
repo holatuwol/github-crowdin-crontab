@@ -9,8 +9,12 @@ except ImportError:
     import os
     DEVNULL = open(os.devnull, 'wb')
 
-def _git(cmd, args, stderr=PIPE, strip=True):
-    pipe = Popen(['git', cmd] + list(args), stdout=PIPE, stderr=stderr)
+def _git(cmd, args, cwd=None, stderr=PIPE, strip=True):
+    if cwd is None:
+        pipe = Popen(['git', cmd] + list(args), stdout=PIPE, stderr=stderr)
+    else:
+        pipe = Popen(['git', cmd] + list(args), cwd=cwd, env={'PWD': cwd}, stdout=PIPE, stderr=stderr)
+
     out, err = pipe.communicate()
 
     if strip:
@@ -64,7 +68,7 @@ def rebase(*args, **kwargs):
     return _git('rebase', args, **kwargs)
 
 def remote(*args, **kwargs):
-    return _git('remote', args, **kwargs)
+    return _git('remote', args, os.getcwd(), **kwargs)
 
 def reset(*args, **kwargs):
     return _git('reset', args, **kwargs)

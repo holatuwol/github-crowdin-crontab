@@ -98,9 +98,11 @@ def get_branch_files(repository, check_upstream=False):
                 (repository.github.branch, repository.github.branch))
 
         diff_output = git.diff(
-            '--name-only', '%s..upstream/%s' % \
+            '--name-only', 'origin/%s..upstream/%s' % \
                 (repository.github.branch, repository.github.branch),
             strip=False)
+
+        git.rebase('upstream/%s' % repository.github.branch)
     else:
         diff_output = '\n'.join([
             line[3:] for line in git.status('status', '-s', strip=False) if len(line) > 3
@@ -132,21 +134,26 @@ def update_translations(repository, all_files):
         target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
 
         if os.path.isfile(target_file):
-            git.add(target_file)
             fix_product_name_tokens(target_file)
+            git.add(target_file)
 
     git.commit('-m', 'Updated translations %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
 
 # Update local copies of translations, translation memory, and glossaries.
 
-def get_repository_state(repository, check_upstream=False):
+def get_repository_state(repository, refresh_paths=None, check_upstream=False):
     global git_root
     git_root = repository.github.git_root
     
     logging.info('cd %s' % git_root)
     os.chdir(git_root)
 
-    new_files, all_files = get_branch_files(repository, check_upstream)
+    if refresh_paths is None:
+        new_files, all_files = get_branch_files(repository, refresh_paths, check_upstream)
+    else:
+        new_files = refresh_paths
+        all_files = refresh_paths
+
     file_info = get_crowdin_file_info(repository)
 
     return new_files, all_files, file_info
@@ -187,13 +194,13 @@ def check_file_lists(repository, new_files, all_files):
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository, check_upstream=False, create_issues=False):
+def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False):
     step_number = 1
 
     logging.info('step %d: get repository state for translation download' % step_number)
     step_number = step_number + 1
 
-    new_files, all_files, file_info = get_repository_state(repository, check_upstream)
+    new_files, all_files, file_info = get_repository_state(repository, refresh_paths, check_upstream)
 
     logging.info('step %d: download current translations' % step_number)
     step_number = step_number + 1
@@ -208,11 +215,6 @@ def update_repository(repository, check_upstream=False, create_issues=False):
     if check_upstream:
         logging.info('step %d: check upstream for source file updates' % step_number)
         step_number = step_number + 1
-
-    git.checkout(repository.github.branch)
-
-    if repository.github.upstream:
-        git.rebase('upstream/%s' % repository.github.branch)
 
     logging.info('step %d: add source files to crowdin' % step_number)
 

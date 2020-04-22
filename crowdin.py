@@ -33,7 +33,7 @@ def _crowdin(*args, stderr=PIPE):
 
     logging.info(' '.join(cmd))
 
-    pipe = Popen(cmd, stdout=PIPE, stderr=stderr)
+    pipe = Popen(cmd, cwd=os.getcwd(), env={'PWD': os.getcwd()}, stdout=PIPE, stderr=stderr)
     out, err = pipe.communicate()
 
     result = out.decode('UTF-8', 'replace').strip()
@@ -126,7 +126,7 @@ def fix_product_name_tokens(file):
 
     file_content = file_content.replace('@<', '@').replace('@>', '@')
 
-    for token in ['@app-ref@', '@ide@', '@platform-ref@', '@product-ver@', '@product@']:
+    for token in ['@app-ref@', '@commerce', '@ide@', '@portal@', '@platform-ref@', '@product@', '@product-ver@']:
         file_content = file_content.replace('@ %s @' % (token[1:-1]), token)
 
     with open(file, 'w') as f:
@@ -154,7 +154,8 @@ def crowdin_upload_sources(repository, new_files):
 
         _crowdin('upload', 'sources')
 
-    git.reset('--hard')
+    for file in new_files:
+        git.checkout(file)
 
     if len(upload_files) > 0:
         after_upload = get_crowdin_file_info(repository)
