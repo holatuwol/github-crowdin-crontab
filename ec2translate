@@ -2,6 +2,9 @@
 
 set -o xtrace
 
+USER=$(whoami)
+HOME=/home/${USER}
+
 docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
 
 docker run --name crowdin \
