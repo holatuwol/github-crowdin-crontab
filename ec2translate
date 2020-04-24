@@ -1,32 +1,37 @@
 #!/bin/bash
 
-set -o xtrace
-
-USER=$(whoami)
-HOME=/home/${USER}
-
+echo "Building docker image"
 docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
 
+echo "Starting docker container"
 docker run --name crowdin \
 --volume /ephemeral/crowdin:/home/jovyan/crowdin \
 --detach crowdin start-notebook.sh --NotebookApp.token=''
 
-docker exec -it crowdin mkdir -p /home/jovyan/.ssh/
+echo "Preparing system credentials"
+docker exec crowdin mkdir -p /home/jovyan/.ssh/
 
 docker cp ${HOME}/.ssh/id_rsa crowdin:/home/jovyan/.ssh/
-docker exec -u root -it crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa
+docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa
 
 docker cp ${HOME}/.ssh/id_rsa.pub crowdin:/home/jovyan/.ssh/
-docker exec -u root -it crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa.pub
+docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa.pub
+
+docker exec -t crowdin ls /home/jovyan/.ssh/
 
 for config in $(git config --list | cut -d'=' -f 1); do
 	docker exec crowdin /bin/bash -c "git config --global ${config} '$(git config ${config})'"
 done
 
-docker exec crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py"
+docker exec -t crowdin git config --list
 
+echo "Fetching new articles and preparing translations"
+docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py"
+
+echo "Cleaning up docker containers"
 docker stop crowdin
 docker rm -v crowdin
 
+echo "Updating GitHub with new articles and translations"
 cd /ephemeral/crowdin/zendesk-articles
 git push origin master
