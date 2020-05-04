@@ -4,7 +4,7 @@ from file_manager import get_crowdin_file, get_eligible_files
 import git
 import os
 from repository import initial_dir
-from zendesk import add_category_articles, download_zendesk_articles, get_zendesk_articles, zendesk_get_request
+from zendesk import add_category_articles, disclaimer_text, download_zendesk_articles, get_zendesk_articles, zendesk_get_request
 
 def get_title(file):
     with open(file, 'r') as f:
@@ -16,8 +16,6 @@ def get_title(file):
 
 def add_mt_disclaimers(repository, file_info):
     now = datetime.now()
-
-    disclaimer_text = '<p class="alert alert-info"><span class="wysiwyg-color-blue120">ファストトラック記事は、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、<a href="mailto:support-content-jp@liferay.com">こちら</a>までご連絡ください。</span></p>'
 
     os.chdir(repository.github.git_root)
 
@@ -41,26 +39,20 @@ def add_mt_disclaimers(repository, file_info):
         if crowdin_file not in file_info or file_info[crowdin_file]['translated'] == file_info[crowdin_file]['approved']:
             continue
 
-        has_disclaimer = False
-        title_pos = -1
+        new_lines = []
 
         with open(target_file, 'r') as f:
-            lines = f.readlines()
+            new_lines = [
+                line for line in f.readlines()
+                    if line.find('<p class="alert alert-info"><span class="wysiwyg-color-blue120">') == -1
+            ]
 
-            for i, line in enumerate(lines):
-                if title_pos == -1 and line.find('#') == 0:
-                    title_pos = i
+        content = '%s\n%s' % (''.join(new_lines), disclaimer_text)
 
-                if line.strip() == disclaimer_text:
-                    has_disclaimer = True
+        with open(target_file, 'w') as f:
+            f.write(content)
 
-        if not has_disclaimer:
-            content = '%s\n%s\n%s' % (''.join(lines[:title_pos+1]), disclaimer_text, ''.join(lines[title_pos+1:]))
-
-            with open(target_file, 'w') as f:
-                f.write(content)
-
-            git.add(target_file)
+        git.add(target_file)
 
     git.commit('-m', 'Added machine translation disclaimer %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
 

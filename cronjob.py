@@ -30,7 +30,7 @@ def zendesk_cronjob(domain):
 
     assert(repository.github.origin == 'holatuwol/zendesk-articles')
 
-    zendesk_articles = update_zendesk_articles(repository, domain)
+    zendesk_articles = update_zendesk_articles(repository, domain, 'ja')
 
     # for repository in repositories:
     #     delete_translation_folder(repository)
