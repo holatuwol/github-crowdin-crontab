@@ -4,6 +4,9 @@ echo "Building docker image"
 docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
 
 echo "Starting docker container"
+docker kill crowdin
+docker rm -v crowdin
+
 docker run --name crowdin \
 --volume /ephemeral/crowdin:/home/jovyan/crowdin \
 --detach crowdin start-notebook.sh --NotebookApp.token=''
@@ -22,8 +25,6 @@ docker exec -t crowdin ls /home/jovyan/.ssh/
 for config in $(git config --list | cut -d'=' -f 1); do
 	docker exec crowdin /bin/bash -c "git config --global ${config} '$(git config ${config})'"
 done
-
-docker exec -t crowdin git config --list
 
 echo "Fetching new articles and preparing translations"
 docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py"

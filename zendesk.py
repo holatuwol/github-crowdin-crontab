@@ -327,6 +327,8 @@ def check_renamed_articles(repository, language, articles, section_paths):
     return new_article_paths
 
 def save_article_metadata(domain, repository, language, articles, article_paths, categories, sections):
+    os.chdir(repository.github.git_root)
+
     new_section_ids = set([
         str(articles[article_id]['section_id']) for article_id in articles.keys()
     ])
@@ -364,6 +366,8 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
     with open('translations.json', 'w') as f:
         json.dump(article_metadata, f, separators=(',', ':'))
 
+    os.chdir(initial_dir)
+
 def get_categories(domain, language):
     categories = {}
 
@@ -371,11 +375,7 @@ def get_categories(domain, language):
         with open('%s/categories_%s.json' % (initial_dir, domain), 'r') as f:
             categories = json.load(f)
 
-    params = {
-        'page': int(len(categories) / 100) + 1
-    }
-
-    category_list = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories', params)
+    category_list = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
 
     for category in category_list:
         category_id = str(category['id'])
@@ -383,7 +383,10 @@ def get_categories(domain, language):
         if category_id in categories and 'title_' + language in categories[category_id]:
             continue
 
-        category['title_' + language] = zendesk_get_request(domain, '/help_center/categories/%s/translations/%s.json' % (category_id, language), 'translation')[0]['title']
+        translations = zendesk_get_request(domain, '/help_center/categories/%s/translations/%s.json' % (category_id, language), 'translation')
+
+        if translations is not None and len(translations) > 0:
+            category['title_' + language] = translations[0]['title']
 
         categories[category_id] = category
 
@@ -399,11 +402,7 @@ def get_sections(domain, language):
         with open('%s/sections_%s.json' % (initial_dir, domain), 'r') as f:
             sections = json.load(f)
 
-    params = {
-        'page': int(len(sections) / 100) + 1
-    }
-
-    section_list = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections', params)
+    section_list = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')
 
     for section in section_list:
         section_id = str(section['id'])
@@ -411,7 +410,10 @@ def get_sections(domain, language):
         if section_id in sections and 'title_' + language in sections[section_id]:
             continue
 
-        section['title_' + language] = zendesk_get_request(domain, '/help_center/sections/%s/translations/%s.json' % (section_id, language), 'translation')[0]['title']
+        translations = zendesk_get_request(domain, '/help_center/sections/%s/translations/%s.json' % (section_id, language), 'translation')
+
+        if translations is not None and len(translations) > 0:
+            section['title_' + language] = translations[0]['title']
 
         sections[section_id] = section
 
@@ -487,7 +489,7 @@ def requires_update(article, language, force=False):
         return True
 
     if article['translated_at']['en-us'][0:10] > article['translated_at'][language][0:10]:
-        logging.info('%s (%s > %s)' % (article['id'], ['translated_at']['en-us'][0:10], article['translated_at'][language][0:10]))
+        logging.info('%s (%s > %s)' % (article['id'], article['translated_at']['en-us'][0:10], article['translated_at'][language][0:10]))
         return True
 
     return False
