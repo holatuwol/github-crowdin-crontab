@@ -156,6 +156,34 @@ def update_translated_at(domain, article_id, language, article, articles, sectio
     if mt_article is not None:
         article['translated_at'][language] = mt_article['edited_at']
 
+def get_new_articles(domain):
+    all_articles = {}
+
+    try:
+        with open('%s/all_articles_%s.json' % (initial_dir, domain), 'r') as f:
+            all_articles = json.load(f)
+    except:
+        pass
+
+    new_start_time = 0 if len(all_articles) == 0 else max([article['updated_at'] for article in all_articles.values()])
+
+    article_parameters = {
+        'start_time': new_start_time
+    }
+
+    new_article_list = zendesk_get_request(domain, '/help_center/incremental/articles.json', 'articles', article_parameters)
+
+    new_articles = {
+        str(article['id']): article for article in new_article_list
+    }
+
+    all_articles.update(new_articles)
+
+    with open('%s/all_articles_%s.json' % (initial_dir, domain), 'w') as f:
+        json.dump(all_articles, f)
+
+    return all_articles
+
 def get_zendesk_articles(repository, domain, language):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
@@ -181,58 +209,25 @@ def get_zendesk_articles(repository, domain, language):
     except:
         pass
 
-    remove_article_ids = [
-        article_id for article_id, article in sorted(articles.items())
-            if not is_tracked_article(article, section_paths)
-    ]
+    # Fetch all articles (let the delegated method handle update tracking)
 
-    for article_id in remove_article_ids:
+    all_articles = get_new_articles(domain)
+    new_tracked_articles = {}
+
+    # Check for updates by comparing against our last set of tracked articles
+
+    for article_id, article in all_articles.items():
         if article_id in articles:
-            del articles[article_id]
+            if not is_tracked_article(article, section_paths):
+                del articles[article_id]
+            elif article['updated_at'] != articles[article_id]['updated_at']:
+            	new_tracked_articles[article_id] = article
+        elif is_tracked_article(article, section_paths):
+            new_tracked_articles[article_id] = article
 
-    # Fetch new articles with the incremental API
+    articles.update(new_tracked_articles)
 
-    new_start_time = 0 if len(articles) == 0 else max([article['updated_at'] for article in articles.values()])
-
-    article_parameters = {
-        'start_time': new_start_time
-    }
-
-    new_article_list = zendesk_get_request(domain, '/help_center/incremental/articles.json', 'articles', article_parameters)
-
-    new_articles = {
-        str(article['id']): article for article in new_article_list
-            if is_tracked_article(article, section_paths)
-    }
-
-    remove_article_ids = [
-        article_id for article_id, article in sorted(new_articles.items())
-            if article_id in articles and article['updated_at'] == articles[article_id]['updated_at']
-    ]
-
-    for article_id in remove_article_ids:
-        del new_articles[article_id]
-
-    # Override past articles
-
-    remove_article_ids = [
-        str(article['id']) for article in new_articles.values()
-            if not is_tracked_article(article, section_paths)
-    ]
-
-    for article_id in remove_article_ids:
-        if article_id in articles:
-            del articles[article_id]
-
-    articles.update(new_articles)
-
-    new_tracked_articles = {
-        article_id: article
-            for article_id, article in sorted(new_articles.items())
-                if is_tracked_article(article, section_paths)
-    }
-
-    logging.info('Found %d tracked articles updated since %s' % (len(new_tracked_articles), new_start_time))
+    logging.info('Found %d tracked articles new/updated tracked articles' % len(new_tracked_articles))
 
     os.chdir(repository.github.git_root)
 
@@ -455,6 +450,16 @@ def download_zendesk_articles(repository, domain, language):
 
     return refresh_articles, refresh_paths
 
+tracked_categories = []
+
+with open('%s/zendesk_tracked_categories.txt' % initial_dir, 'r') as f:
+    tracked_categories = [line.strip() for line in f.readlines()]
+
+tracked_labels = []
+
+with open('%s/zendesk_tracked_labels.txt' % initial_dir, 'r') as f:
+    tracked_labels = [line.strip() for line in f.readlines()]
+
 def is_tracked_article(article, section_paths):
     if article['draft']:
         return False
@@ -466,11 +471,14 @@ def is_tracked_article(article, section_paths):
     category_name = section_path[0:section_path.find('/')]
     label_names = article['label_names']
 
-    if category_name != 'Announcements' and category_name != 'Knowledge Base':
-        if 'Knowledge Base' not in label_names and 'Fast Track' not in label_names:
-            return False
+    if category_name in tracked_categories:
+        return True
 
-    return True
+    for label_name in label_names:
+        if label_name in tracked_labels:
+            return True
+
+    return False
 
 def requires_update(article, language, force=False):
     if language not in article['label_names']:
