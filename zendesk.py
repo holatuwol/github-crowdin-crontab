@@ -37,6 +37,8 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
         r = session.post(url, headers=auth_headers, json=json_params)
     elif request_type == 'PUT':
         r = session.put(url, headers=auth_headers, json=json_params)
+    elif request_type == 'GET' and json_params is None:
+        r = session.get(url, headers=auth_headers)
     else:
         return None
 

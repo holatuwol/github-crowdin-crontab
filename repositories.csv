@@ -6,3 +6,5 @@ liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,discover/p
 liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,discover/portal/articles-dxp,TRUE
 liferay-learn,commerce-ja-test,docs/commerce/2.x/en,378113,liferay-documentation,liferay-learn/commerce/2.x,,FALSE
 liferay-learn,dxp-ja-test,docs/dxp/7.x/en,378113,liferay-documentation,liferay-learn/dxp/7.x,,FALSE
+zendesk-articles,master,en,378113,liferay-documentation,support-policy,Knowledge Base/360002044091-Support-Policy,FALSE
+zendesk-articles,master,en,378113,liferay-documentation,support-policy,Support Coverage,FALSE

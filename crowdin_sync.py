@@ -149,7 +149,7 @@ def get_repository_state(repository, refresh_paths=None, check_upstream=False):
     os.chdir(git_root)
 
     if refresh_paths is None:
-        new_files, all_files = get_branch_files(repository, refresh_paths, check_upstream)
+        new_files, all_files = get_branch_files(repository, check_upstream)
     else:
         new_files = refresh_paths
         all_files = refresh_paths
@@ -216,7 +216,7 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
         logging.info('step %d: check upstream for source file updates' % step_number)
         step_number = step_number + 1
 
-    logging.info('step %d: add source files to crowdin' % step_number)
+    logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
 
     old_file_info, file_info = update_sources(repository, new_files)
     

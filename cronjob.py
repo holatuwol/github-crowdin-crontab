@@ -26,14 +26,17 @@ def get_repositories(check_accessible=True):
 def zendesk_cronjob(domain):
     os.chdir(initial_dir)
 
-    repository = get_repositories(False)[0]
+    all_repositories = get_repositories(False)
 
-    assert(repository.github.origin == 'holatuwol/zendesk-articles')
+    check_repositories = [
+        repository for repository in all_repositories
+            if repository.github.origin == 'holatuwol/zendesk-articles'
+    ]
 
-    zendesk_articles = update_zendesk_articles(repository, domain, 'ja')
+    for repository in check_repositories:
+        update_zendesk_articles(repository, domain, 'ja')
 
-    # for repository in repositories:
-    #     delete_translation_folder(repository)
+    delete_translation_folder(repository, 'zendesk')
 
 if __name__ == '__main__':
     zendesk_cronjob(prod_domain)
