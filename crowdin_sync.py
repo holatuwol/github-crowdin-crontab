@@ -160,6 +160,9 @@ def get_repository_state(repository, refresh_paths=None, check_upstream=False):
 
 def check_file_lists(repository, new_files, all_files):
     for file in all_files:
+        if not os.path.exists(file):
+            continue
+
         with open(file, 'r') as f:
             file_content = f.read()
 
