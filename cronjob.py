@@ -33,10 +33,14 @@ def zendesk_cronjob(domain):
             if repository.github.origin == 'holatuwol/zendesk-articles'
     ]
 
-    for repository in check_repositories:
-        update_zendesk_articles(repository, domain, 'ja')
+    try:
+        for repository in check_repositories:
+            update_zendesk_articles(repository, domain, 'ja')
+    except:
+        pass
 
     delete_translation_folder(repository, 'zendesk')
+    delete_translation_folder(repository, 'support-policy')
 
 if __name__ == '__main__':
     zendesk_cronjob(prod_domain)

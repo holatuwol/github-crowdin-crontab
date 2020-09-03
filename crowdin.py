@@ -334,15 +334,22 @@ def wait_for_translation(repository):
         response = crowdin_http_request(
             repository, '/backend/project_actions/pre_translate_progress', 'GET')
 
-        response_data = json.loads(response.decode('utf-8'))
+        response_text = response.decode('utf-8')
 
-        if 'success' not in response_data or not response_data['success']:
+        try:
+            response_data = json.loads(response_text)
+
+            if 'success' not in response_data or not response_data['success']:
+                return
+
+            if 'progress' not in response_data or response_data['progress'] == 100:
+                return
+
+            logging.info('crowdin-api pre-translate progress %d%%' % response_data['progress'])
+        except:
+            print(response_text)
+
             return
-
-        if 'progress' not in response_data or response_data['progress'] == 100:
-            return
-
-        logging.info('crowdin-api pre-translate progress %d%%' % response_data['progress'])
 
         time.sleep(5)
 
