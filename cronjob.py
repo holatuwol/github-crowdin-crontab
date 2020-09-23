@@ -39,8 +39,8 @@ def zendesk_cronjob(domain):
     except:
         pass
 
-    delete_translation_folder(repository, 'zendesk')
-    delete_translation_folder(repository, 'support-policy')
+    for repository in check_repositories:
+        delete_translation_folder(repository)
 
 if __name__ == '__main__':
     zendesk_cronjob(prod_domain)
