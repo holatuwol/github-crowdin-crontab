@@ -426,7 +426,7 @@ def crowdin_http_request(repository, path, method, **data):
     if token_input is None:
         return crowdin_http_request(repository, path, method, **data)
     
-    data = {
+    login_data = {
         'email_or_login': git.config('crowdin.login'),
         'password': git.config('crowdin.password'),
         'hash': 'files',
@@ -436,7 +436,7 @@ def crowdin_http_request(repository, path, method, **data):
         '_token': token_input.attrs['value']
     }
 
-    r = session.post(login_url, data=data)
+    r = session.post(login_url, data=login_data)
     
     return crowdin_http_request(repository, path, method, **data)
 
@@ -492,14 +492,16 @@ def process_suggestions(repository, crowdin_file_name, file_info, translation_fi
         if len(suggestions) > 0:
             has_suggestions = True
 
-        for suggestion in suggestions:
-            logging.info('Deleting suggestion %s from user %s' % (suggestion['id'], suggestion['user']['login']))
-            crowdin_http_request(
-                repository, '/backend/suggestions/delete', 'GET',
-                translation_id=translation_id, plural_id='-1', suggestion_id=suggestion['id'])
+            for suggestion in suggestions:
+                logging.info('Deleting suggestion %s from user %s' % (suggestion['id'], suggestion['user']['login']))
+                crowdin_http_request(
+                    repository, '/backend/suggestions/delete', 'GET',
+                    translation_id=translation_id, plural_id='-1', suggestion_id=suggestion['id'])
 
         if translation_post_process is not None and response_data is not None:
             translation_post_process(translation_id, response_data)
+
+    return has_suggestions
 
 # Clear out auto-translations so we have a better sense of progress
 
@@ -542,13 +544,16 @@ def delete_code_translations(repository, file_name, file_info):
                 repository, '/backend/translation/change_visibility', 'GET',
                 translation_id=translation_id, hidden=1)
 
+    def always_true(x):
+        return True
+
     def is_auto_translation(x):
         return x['user']['login'] == 'is-user'
 
     if file_name[-4:] == '.rst':
         has_suggestions = process_suggestions(
             repository, crowdin_file_name, file_info,
-            is_rst_directive, hide_translation, is_auto_translation)
+            is_rst_directive, hide_translation, always_true)
     else:
         has_suggestions = process_suggestions(
             repository, crowdin_file_name, file_info,
