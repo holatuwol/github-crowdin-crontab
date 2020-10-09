@@ -363,7 +363,7 @@ def translate_with_machine(repository, file_ids):
 
         data = {
             'project_id': repository.crowdin.project_id,
-            'engine': 'google-translate',
+            'engine': 'deepl-translator',
             'approve_translated': '0',
             'auto_approve_option': '0',
             'import_duplicates': '0',
