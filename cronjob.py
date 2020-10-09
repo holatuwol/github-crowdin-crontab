@@ -1,8 +1,10 @@
 from crowdin import delete_translation_folder
+from crowdin_sync import update_repository
 from github import is_repository_accessible
 import os
 import pandas as pd
 from repository import get_repository, initial_dir
+import sys
 import time
 from zendesk import update_zendesk_articles
 
@@ -10,8 +12,7 @@ uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
 
 def get_repositories(check_accessible=True):
-    os.chdir(initial_dir)
-    repositories_df = pd.read_csv('repositories.csv', comment='#')
+    repositories_df = pd.read_csv('%s/repositories.csv' % initial_dir, comment='#')
     repositories_df.fillna('', inplace=True)
 
     repositories = [get_repository(**x) for x in repositories_df.to_dict('records')]
@@ -23,24 +24,58 @@ def get_repositories(check_accessible=True):
 
     return repositories
 
-def zendesk_cronjob(domain):
-    os.chdir(initial_dir)
-
+def list_jobs():
     all_repositories = get_repositories(False)
 
-    check_repositories = [
-        repository for repository in all_repositories
-            if repository.github.origin == 'holatuwol/zendesk-articles'
-    ]
+    print()
+    print('Valid commands:')
 
-    try:
-        for repository in check_repositories:
-            update_zendesk_articles(repository, domain, 'ja')
-    except:
-        pass
+    for repository in all_repositories:
+        git_root = repository.github.git_root
 
-    for repository in check_repositories:
-        delete_translation_folder(repository)
+        git_repository = git_root[git_root.rfind('/')+1:]
+        git_folder = repository.github.project_folder if repository.github.single_folder is None else repository.github.single_folder
+
+        print('  python %s %s %s' % (sys.argv[0], git_repository, git_folder))
+
+def execute_job(domain, git_repository, git_folder):
+    all_repositories = get_repositories(False)
+
+    check_repositories = []
+
+    for repository in all_repositories:
+        git_root = repository.github.git_root
+
+        if git_root[git_root.rfind('/')+1:] != git_repository:
+            continue
+
+        if repository.github.single_folder is None:
+            if repository.github.project_folder != git_folder:
+                continue
+        else:
+            if repository.github.single_folder != git_folder:
+                continue
+
+        check_repositories.append(repository)
+
+    if len(check_repositories) != 1:
+        list_jobs()
+        return
+
+    repository = check_repositories[0]
+
+    if repository.github.origin == 'holatuwol/zendesk-articles':
+        update_zendesk_articles(repository, domain, 'ja')
+    else:
+        print(repository)
+
+        value = input('continue (y/n): ')
+
+        if value == 'y':
+            update_repository(repository)
 
 if __name__ == '__main__':
-    zendesk_cronjob(prod_domain)
+    if len(sys.argv) == 1:
+        list_jobs()
+    else:
+        execute_job(prod_domain, sys.argv[1], sys.argv[2])

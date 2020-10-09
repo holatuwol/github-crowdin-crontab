@@ -1,11 +1,10 @@
 git_repository,git_branch,git_folder,project_id,project_name,project_folder,single_folder,delete_enabled
 zendesk-articles,master,en,378113,liferay-documentation,zendesk,,TRUE
 liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,develop/tutorials/articles,FALSE
-liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,develop/tutorials/articles-dxp,TRUE
+liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,develop/tutorials/articles-dxp,FALSE
 liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,discover/portal/articles,TRUE
 liferay-docs,7.1.x,en,378113,liferay-documentation,liferay-docs/7.1.x,discover/portal/articles-dxp,TRUE
-liferay-learn,commerce-ja-test,docs/commerce/2.x/en,378113,liferay-documentation,liferay-learn/commerce/2.x,,FALSE
+liferay-learn,commerce-ja-test,docs/commerce/2.x/en,420856,liferay-japan-documentation,commerce/2.x,,FALSE
 liferay-learn,dxp-ja-test,docs/dxp/7.x/en,378113,liferay-documentation,liferay-learn/dxp/7.x,,FALSE
-liferay-learn,dxpc-ja-test,docs/dxp-cloud/latest/en,378113,liferay-documentation,liferay-learn/dxp-cloud/latest,,FALSE
-zendesk-articles,master,en,378113,liferay-documentation,support-policy,Knowledge Base/360002044091-Support-Policy,FALSE
-zendesk-articles,master,en,378113,liferay-documentation,support-policy,Support Coverage,FALSE
+liferay-learn,dxpc-ja-test,docs/dxp-cloud/latest/en,420856,liferay-japan-documentation,dxp-cloud/latest,,FALSE
+liferay-learn,ac-ja-test,docs/analytics-cloud/latest/en,420856,liferay-japan-documentation,analytics-cloud/latest,,FALSE

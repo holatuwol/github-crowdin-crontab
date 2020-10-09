@@ -17,6 +17,8 @@ disclaimer_text = '''
 </span></aside>
 '''
 
+disclaimer_text_no_newline = disclaimer_text.replace('\n', '').strip()
+
 def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
         parameters[name] = default_value
@@ -123,7 +125,7 @@ def get_article_path(en_article, language, section_paths):
 
     return '%s/%s/%s%s.html' % (language[0:2], section_path, date_folder, url_name)
 
-def get_zendesk_article(domain, article_id, language, articles, section_paths):
+def get_zendesk_article(domain, article_id, language):
     api_path = '/help_center/%s/articles/%s.json' % (language, article_id)
     mt_articles = zendesk_get_request(domain, api_path, 'article')
 
@@ -132,24 +134,15 @@ def get_zendesk_article(domain, article_id, language, articles, section_paths):
 
     article = mt_articles[0]
 
-    if language != 'en-us' and language not in article['label_names']:
-        return article
-
-    article_path = get_article_path(articles[article_id], language, section_paths)
-
-    os.makedirs(os.path.dirname(article_path), exist_ok=True)
-
-    with open(article_path, 'w', encoding='utf-8') as f:
-        f.write('<h1>%s</h1>\n' % article['title'])
-        f.write(article['body'])
-
-    git.add(article_path)
-
     return article
 
 def update_translated_at(domain, article_id, language, article, articles, section_paths):
-    en_article = get_zendesk_article(domain, article_id, 'en-us', articles, section_paths)
-    mt_article = get_zendesk_article(domain, article_id, language, articles, section_paths)
+    en_article = get_zendesk_article(domain, article_id, 'en-us')
+
+    if en_article is None:
+        return
+
+    mt_article = get_zendesk_article(domain, article_id, language)
 
     article['translated_at'] = {
         'en-us': en_article['edited_at']
@@ -223,14 +216,15 @@ def get_zendesk_articles(repository, domain, language):
             if not is_tracked_article(article, section_paths):
                 del articles[article_id]
             elif article['updated_at'] != articles[article_id]['updated_at']:
-            	new_tracked_articles[article_id] = article
+                new_tracked_articles[article_id] = article
         elif is_tracked_article(article, section_paths):
             new_tracked_articles[article_id] = article
 
     articles.update(new_tracked_articles)
 
-    logging.info('Found %d tracked articles new/updated tracked articles' % len(new_tracked_articles))
+    logging.info('Found %d new/updated tracked articles' % len(new_tracked_articles))
 
+    old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
     for article_id, article in sorted(articles.items()):
@@ -245,43 +239,72 @@ def get_zendesk_articles(repository, domain, language):
     with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
-    git.commit('-m', 'Downloaded updated articles: %s' % datetime.now())
-
-    os.chdir(initial_dir)
+    os.chdir(old_dir)
 
     return articles, new_tracked_articles, categories, sections, section_paths
 
-def translate_articles(repository, domain, language, refresh_articles, refresh_paths):
+def translate_articles(repository, domain, language, articles, article_paths, refresh_articles, refresh_paths):
     logging.info('Updating translations for %d articles' % len(refresh_paths))
 
-    update_repository(repository, refresh_paths.values())
+    update_repository(repository, list(refresh_paths.values()))
+
+    old_dir = os.getcwd()
 
     os.chdir(repository.github.git_root)
 
-    for article_id, article in sorted(refresh_articles.items()):
-        file = refresh_paths[article_id]
+    # Identify the updated articles and add them to the Git index
 
-        if update_zendesk_translation(domain, article, file, language):
-            target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
-            git.add(target_file)
+    for article_id, file in sorted(article_paths.items()):
+        article = articles[article_id]
+
+        if language in article['label_names'] and 'mt' not in article['label_names']:
+            continue
+
+        target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+
+        new_title, old_content, new_content = add_disclaimer(article, target_file, language)
+
+        if old_content == new_content:
+            continue
+
+        with open(target_file, 'w') as f:
+            f.write('<h1>%s</h1>\n' % new_title)
+            f.write(new_content)
+
+        git.add(target_file)
+
+    updated_files = get_eligible_files(repository, git.diff('HEAD', '--cached', '--name-only'), language)
+    missing_language_article_ids = [article['id'] for article in articles.values() if language not in article['label_names']]
+
+    logging.info('%d updated files, %d missing %s label' % (len(updated_files), len(missing_language_article_ids), language))
+
+    # Identify the articles which were added to the Git index and send them to Zendesk
+
+    for article_id, file in sorted(article_paths.items()):
+        article = articles[article_id]
+        target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+
+        if language in article['label_names'] and target_file not in updated_files:
+            continue
+
+        update_zendesk_translation(repository, domain, article, file, language)
 
     git.commit('-m', 'Translated new articles: %s' % datetime.now())
 
-    os.chdir(initial_dir)
+    os.chdir(old_dir)
 
 def update_zendesk_articles(repository, domain, language):
-    last_refresh_count = 0
-    refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, language)
-    dest_folder = repository.crowdin.dest_folder
+    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, language)
 
-    while len(refresh_paths) > 0 and last_refresh_count != len(refresh_paths):
-        last_refresh_count = len(refresh_paths)
-        translate_articles(repository, domain, language, refresh_articles, refresh_paths)
-        refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, language)
+    translate_articles(repository, domain, language, articles, article_paths, refresh_articles, refresh_paths)
+
+    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+        json.dump(articles, f)
 
     return refresh_articles
 
 def check_renamed_articles(repository, language, articles, section_paths):
+    old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
     old_article_paths = {
@@ -295,6 +318,17 @@ def check_renamed_articles(repository, language, articles, section_paths):
                 if is_tracked_article(article, section_paths)
     }
 
+    old_translated_paths = {
+        get_article_id(file): file
+             for file in git.ls_files(language + '/').split('\n')
+    }
+
+    new_translated_paths = {
+        str(article['id']): get_article_path(article, language, section_paths)
+            for article in articles.values()
+                if is_tracked_article(article, section_paths)
+    }
+
     for article_id, new_article_path in sorted(new_article_paths.items()):
         if article_id not in old_article_paths:
             continue
@@ -304,26 +338,35 @@ def check_renamed_articles(repository, language, articles, section_paths):
         if old_article_path == new_article_path:
             continue
 
-        if os.path.exists(old_article_path):
-            os.rename(old_article_path, new_article_path)
-            git.add(old_article_path)
-            git.add(new_article_path)
+        os.makedirs(os.path.dirname(new_article_path), exist_ok=True)
+        os.rename(old_article_path, new_article_path)
 
-        old_article_path = language + '/' + old_article_path[3:]
-        new_article_path = language + '/' + new_article_path[3:]
+        git.add(old_article_path)
+        git.add(new_article_path)
 
-        if os.path.exists(old_article_path):
-            os.rename(old_article_path, new_article_path)
-            git.add(old_article_path)
-            git.add(new_article_path)
+    for article_id, new_article_path in sorted(new_translated_paths.items()):
+        if article_id not in old_translated_paths:
+            continue
+
+        old_article_path = old_translated_paths[article_id]
+
+        if old_article_path == new_article_path:
+            continue
+
+        os.makedirs(os.path.dirname(new_article_path), exist_ok=True)
+        os.rename(old_article_path, new_article_path)
+
+        git.add(old_article_path)
+        git.add(new_article_path)
 
     git.commit('-m', 'Renamed articles: %s' % datetime.now())
 
-    os.chdir(initial_dir)
+    os.chdir(old_dir)
 
     return new_article_paths
 
 def save_article_metadata(domain, repository, language, articles, article_paths, categories, sections):
+    old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
     new_section_ids = set([
@@ -363,7 +406,7 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
     with open('translations.json', 'w') as f:
         json.dump(article_metadata, f, separators=(',', ':'))
 
-    os.chdir(initial_dir)
+    os.chdir(old_dir)
 
 def get_categories(domain, language):
     categories = {}
@@ -439,18 +482,59 @@ def download_zendesk_articles(repository, domain, language):
 
     save_article_metadata(domain, repository, language, articles, article_paths, categories, sections)
 
-    refresh_articles = {
-        article_id: article
+    old_dir = os.getcwd()
+    os.chdir(repository.github.git_root)
+
+    # First pass: check if anything appears to be out of date
+
+    candidate_article_ids = [
+        article_id
             for article_id, article in sorted(articles.items())
-                if requires_update(article, language)
+                if requires_update(repository, domain, article, language, article_paths[article_id])
+    ]
+
+    # Second pass: anything that looks outdated, make sure its translation metadata is up-to-date
+
+    for article_id in candidate_article_ids:
+        update_translated_at(domain, article_id, language, articles[article_id], articles, section_paths)
+
+    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+        json.dump(articles, f)
+
+    # Third pass: assume metadata is complete, check what is out of date
+
+    refresh_articles = {
+        article_id: articles[article_id]
+            for article_id in candidate_article_ids
+                if requires_update(repository, domain, articles[article_id], language, article_paths[article_id])
     }
+
+    # Cache the articles on disk so we can work on them without having to go back to the API
+
+    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+        json.dump(articles, f)
 
     refresh_paths = {
         article_id: article_paths[article_id]
             for article_id in refresh_articles.keys()
     }
 
-    return refresh_articles, refresh_paths
+    for article_id, article in refresh_articles.items():
+        article_path = refresh_paths[article_id]
+
+        os.makedirs(os.path.dirname(article_path), exist_ok=True)
+
+        with open(article_path, 'w', encoding='utf-8') as f:
+            f.write('<h1>%s</h1>\n' % article['title'])
+            f.write(article['body'])
+
+        git.add(article_path)
+
+    git.commit('-m', 'Recently added articles: %s' % datetime.now())
+
+    os.chdir(old_dir)
+
+    return articles, article_paths, refresh_articles, refresh_paths
 
 tracked_categories = []
 
@@ -473,6 +557,9 @@ def is_tracked_article(article, section_paths):
     category_name = section_path[0:section_path.find('/')]
     label_names = article['label_names']
 
+    if 'mt' in label_names:
+        return True
+
     if category_name in tracked_categories:
         return True
 
@@ -482,30 +569,76 @@ def is_tracked_article(article, section_paths):
 
     return False
 
-def requires_update(article, language, force=False):
+def requires_update(repository, domain, article, language, file):
+    # check if machine translation is needed
+
     if language not in article['label_names']:
-        logging.info('%s (missing %s label in %s)' % (article['id'], language, ','.join(article['label_names'])))
+        logging.info('%s (missing %s label)' % (article['id'], language))
         return True
 
     if 'mt' not in article['label_names']:
         return False
 
-    if force:
-        logging.info('%s (force update)' % article['id'])
+    # check if it's a new file
+
+    if not os.path.isfile(file):
+        logging.info('%s (new source file)' % article['id'])
         return True
+
+    # check if we have a date for the last translation
 
     if language not in article['translated_at']:
-        logging.info('%s (missing %s metadata in %s)' % (article['id'], language, ','.join(article['translated_at'])))
+        logging.info('%s (missing %s label)' % (article['id'], language, ','.join(article['translated_at'])))
         return True
 
-    if article['translated_at']['en-us'][0:10] > article['translated_at'][language][0:10]:
+    if article['translated_at']['en-us'][0:10] <= article['translated_at'][language][0:10]:
+        return False
+
+    # check if a translation is missing
+
+    target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+    target_path = '%s/%s' % (repository.github.git_root, target_file)
+
+    if not os.path.exists(target_path):
+        logging.info('%s (no translation %s)' % (article['id'], target_path))
+        return True
+
+    # check if the source language was changed
+
+    with open(file, 'r') as f:
+        old_content = ''.join(f.readlines()).strip()
+
+    new_content = '<h1>%s</h1>\n%s' % (article['title'], article['body'])
+
+    if old_content != new_content:
         logging.info('%s (%s > %s)' % (article['id'], article['translated_at']['en-us'][0:10], article['translated_at'][language][0:10]))
         return True
 
+    # check if it's missing a disclaimer
+
+    missing_disclaimer = True
+    new_title, old_content, new_content = add_disclaimer(article, target_file, language)
+
+    if old_content == new_content:
+        missing_disclaimer = False
+    else:
+        mt_article = get_zendesk_article(domain, article['id'], language)
+
+        if mt_article is None:
+            logging.info('%s (deleted article)' % article['id'])
+            return False
+
+        missing_disclaimer = mt_article['body'].find(disclaimer_text.strip()) == -1
+
+    if missing_disclaimer:
+        logging.info('%s (missing MT disclaimer)' % article['id'])
+        return True
+
+    logging.info('%s (outdated, but text matches)' % article['id'])
     return False
 
-def add_disclaimer(article, target_file):
-    with open(target_file, 'r') as f:
+def add_disclaimer(article, file, language):
+    with open(file, 'r') as f:
         lines = f.readlines()
 
     new_title = lines[0][4:-6]
@@ -522,40 +655,39 @@ def add_disclaimer(article, target_file):
     else:
         new_content = ''.join(lines[1:]).strip()
 
+    if new_content.find('<aside class="alert alert-info"><span class="wysiwyg-color-blue120">') != -1:
+        new_content = new_content[new_content.find('</span></aside>')+15:].strip()
+
     script_disclaimer = new_content.find('var disclaimerElement')
 
     if script_disclaimer != -1:
         script_disclaimer = new_content.rfind('<script>', 0, script_disclaimer)
         new_content = new_content[0:script_disclaimer].strip()
 
-    if 'mt' in article['label_names']:
+    if 'mt' in article['label_names'] and language is not None and language != 'en':
         new_content = (disclaimer_text + new_content).strip()
 
     return new_title, old_content, new_content
 
-def update_zendesk_translation(domain, article, file, language, force=False):
+def update_zendesk_translation(repository, domain, article, file, language):
     global disclaimer_text
-
-    if not requires_update(article, language, force):
-        return False
 
     target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
 
     if not os.path.exists(target_file):
+        print('%s (skipping translation not available on file system)' % article['id'])
         return False
 
     # Update the labels
 
     update_labels = False
 
-    if not force:
-        if language not in article['label_names']:
-            article['label_names'].append(language)
-            update_labels = True
+    if language not in article['label_names']:
+        article['label_names'].append(language)
+        update_labels = True
 
         if 'mt' not in article['label_names']:
             article['label_names'].append('mt')
-            update_labels = True
 
     if update_labels:
         json_params = {
@@ -571,16 +703,9 @@ def update_zendesk_translation(domain, article, file, language, force=False):
 
     # Check if the translation needs an update
 
-    new_title, old_content, new_content = add_disclaimer(article, target_file)
+    new_title, old_content, new_content = add_disclaimer(article, target_file, language)
 
-    if old_content == new_content:
-        return False
-
-    with open(target_file, 'w') as f:
-        f.write('<h1>%s</h1>\n' % new_title)
-        f.write(new_content)
-
-    git.add(target_file)
+    logging.info('%s (updating translation)' % article['id'])
 
     # Update the translation
 
@@ -591,10 +716,7 @@ def update_zendesk_translation(domain, article, file, language, force=False):
     except:
         return False
 
-    if missing_locales is None:
-        return False
-
-    if language in missing_locales:
+    if missing_locales is None or language in missing_locales:
         json_params = {
             'translation': {
                 'locale': language,

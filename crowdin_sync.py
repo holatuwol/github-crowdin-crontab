@@ -1,4 +1,4 @@
-from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, fix_product_name_tokens, get_crowdin_file_info, pre_translate_folder, save_glossary, save_translation_memory
+from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, fix_product_name_tokens, get_crowdin_file_info, pre_translate, save_glossary, save_translation_memory
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders
 import git
@@ -57,7 +57,7 @@ def cleanup_files(repository, all_files, old_file_info, new_file_info):
 
     return update_sources(repository, to_upload)
 
-def update_sources(repository, new_files):
+def update_sources(repository, new_files, all_files):
     old_file_info, file_info = crowdin_upload_sources(repository, new_files)
 
     update_files = set(new_files)
@@ -76,15 +76,14 @@ def update_sources(repository, new_files):
         update_files.add(file)
 
     if repository.crowdin.delete_enabled:
-        for folder in get_root_folders(repository, update_files):
-            file_info = pre_translate_folder(repository, folder, update_files, file_info)
+        file_info = pre_translate(repository, update_files, file_info)
     else:
         for file in update_files:
             delete_code_translations(repository, file, file_info)
 
         file_info = get_crowdin_file_info(repository)
 
-    crowdin_download_translations(repository, update_files, update_files, file_info)
+    crowdin_download_translations(repository, all_files, file_info)
 
     return old_file_info, file_info
 
@@ -115,30 +114,6 @@ def get_branch_files(repository, check_upstream=False):
 
     return new_files, all_files
 
-# Keep CrowdIn and GitHub translations in sync.
-
-def update_translations(repository, all_files):
-    now = datetime.now()
-
-    for file in all_files:
-        if file[-3:] == '.md' or file[-4:] == '.rst':
-            continue
-
-        md_file = file[:-9] + '.md'
-
-        if os.path.isfile(md_file):
-            os.remove(md_file)
-            os.rename(file, md_file)
-
-    for file in all_files:
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if os.path.isfile(target_file):
-            fix_product_name_tokens(target_file)
-            git.add(target_file)
-
-    git.commit('-m', 'Updated translations %s' % now.strftime("%Y-%m-%d %H:%M:%S"))
-
 # Update local copies of translations, translation memory, and glossaries.
 
 def get_repository_state(repository, refresh_paths=None, check_upstream=False):
@@ -152,7 +127,7 @@ def get_repository_state(repository, refresh_paths=None, check_upstream=False):
         new_files, all_files = get_branch_files(repository, check_upstream)
     else:
         new_files = refresh_paths
-        all_files = refresh_paths
+        _, all_files = get_branch_files(repository, check_upstream)
 
     file_info = get_crowdin_file_info(repository)
 
@@ -205,24 +180,15 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     new_files, all_files, file_info = get_repository_state(repository, refresh_paths, check_upstream)
 
-    logging.info('step %d: download current translations' % step_number)
-    step_number = step_number + 1
-
-    crowdin_download_translations(repository, all_files, [], file_info)
-
-    logging.info('step %d: check current translations for known errors' % step_number)
+    logging.info('step %d: check for existing translations of %d files' % (step_number, len(all_files)))
     step_number = step_number + 1
 
     check_file_lists(repository, new_files, all_files)
 
-    if check_upstream:
-        logging.info('step %d: check upstream for source file updates' % step_number)
-        step_number = step_number + 1
-
     logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
 
-    old_file_info, file_info = update_sources(repository, new_files)
-    
+    old_file_info, file_info = update_sources(repository, new_files, all_files)
+
     if create_issues:
         logging.info('step %d: generate github issues' % step_number)
         step_number = step_number + 1
@@ -231,8 +197,6 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     logging.info('step %d: add updated translations to github' % step_number)
     step_number = step_number + 1
-
-    update_translations(repository, all_files)
 
     if create_issues:
         logging.info('step %d: update github project' % step_number)

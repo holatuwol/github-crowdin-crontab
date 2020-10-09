@@ -48,6 +48,9 @@ def get_repository(git_repository, git_branch, git_folder, project_id, project_n
 
     project_api_key = git.config('crowdin.api-key.%s' % project_name)
 
+    if len(project_api_key) == 0:
+        project_api_key = None
+
     os.chdir(initial_dir)
 
     return TranslationRepository(

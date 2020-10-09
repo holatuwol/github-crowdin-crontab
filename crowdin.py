@@ -13,16 +13,16 @@ import random
 from repository import initial_dir
 import requests
 from scrape_liferay import authenticate, session
-from subprocess import Popen, PIPE
+import subprocess
 import time
 import urllib
 
 next_export = None
 
-def _crowdin(*args, stderr=PIPE):
+def _crowdin(*args):
     global next_export
 
-    cmd = ['crowdin'] + list(args)
+    cmd = ['java', '-Duser.dir=%s' % os.getcwd(), '-jar', '/usr/lib/crowdin/crowdin-cli.jar'] + list(args)
 
     if args[0] == 'download' and next_export is not None:
         sleep_time = (next_export - datetime.now()).total_seconds()
@@ -31,15 +31,21 @@ def _crowdin(*args, stderr=PIPE):
             logging.info('Waiting %d minutes for next available export slot' % (sleep_time / 60))
             time.sleep(sleep_time)
 
-    logging.info(' '.join(cmd))
+    run_cmd = ' '.join(cmd)
 
-    pipe = Popen(cmd, cwd=os.getcwd(), env={'PWD': os.getcwd()}, stdout=PIPE, stderr=stderr)
-    out, err = pipe.communicate()
+    logging.info(run_cmd)
 
-    result = out.decode('UTF-8', 'replace').strip()
+    finish = subprocess.run([run_cmd], cwd=os.getcwd(), capture_output=True, shell=True)
+
+    if finish.returncode == 0:
+        result = finish.stdout.decode('UTF-8', 'replace').strip()
+    else:
+        result = None
+
+    print(finish.stderr)
 
     if args[0] == 'download':
-        next_export = datetime.now() + timedelta(minutes=30)
+        next_export = datetime.now() + timedelta(minutes=40)
 
     return result
 
@@ -71,7 +77,7 @@ def _pandoc(source_file, target_file, *args):
 
     cmd = ['pandoc'] + list(args)
 
-    pipe = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    pipe = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = pipe.communicate(input=tail_lines.encode('UTF-8'))
 
     nowrap_lines = out.decode('UTF-8', 'replace')
@@ -102,7 +108,7 @@ def get_crowdin_config_entry(repository, file):
     }
 
 def configure_crowdin(repository, files):
-    configs = [get_crowdin_config_entry(repository, file) for file in files]
+    configs = [get_crowdin_config_entry(repository, file) for file in sorted(set(files))]
     config_json = json.dumps(configs, indent=2)
 
     with open('%s/crowdin.yaml' % repository.github.git_root, 'w') as f:
@@ -138,6 +144,8 @@ def crowdin_upload_sources(repository, new_files):
     before_upload = get_crowdin_file_info(repository)
 
     for file in new_files:
+        git.checkout(file)
+
         extension = file[file.rfind('.'):]
 
         if extension == '.md' or extension == '.markdown':
@@ -164,47 +172,17 @@ def crowdin_upload_sources(repository, new_files):
     
     return before_upload, after_upload
 
-def crowdin_download_missing_translations(repository, all_files, file_info):
-    missing_files = []
+def crowdin_download_translations(repository, refresh_files, file_info):
+    updated_files = list(refresh_files)
 
-    for file in all_files:
+    for file in refresh_files:
         crowdin_file = get_crowdin_file(repository, file)
 
         if crowdin_file not in file_info:
             continue
 
         metadata = file_info[crowdin_file]
-
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if not os.path.isfile('%s/%s' % (repository.github.git_root, target_file)):
-            missing_files.append(file)
-    
-    if len(missing_files) == 0:
-        return
-
-    os.chdir(repository.github.git_root)
-
-    configure_crowdin(repository, missing_files)
-
-    _crowdin('download', '-l', 'ja')
-
-    os.chdir(initial_dir)
-
-def crowdin_download_translations(repository, all_files, new_files, file_info):
-    updated_files = list(new_files)
-
-    for file in set(all_files).difference(set(new_files)):
-        crowdin_file = get_crowdin_file(repository, file)
-
-        if crowdin_file not in file_info:
-            continue
-
-        metadata = file_info[crowdin_file]
-
-        if metadata['phrases'] == metadata['approved']:
-            updated_files.append(file)
-            continue
+        updated_files.append(file)
 
         target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
 
@@ -353,22 +331,22 @@ def wait_for_translation(repository):
 
         time.sleep(5)
 
-def translate_with_machine(repository, file_ids):
+def translate_with_machine(repository, engine, file_ids):
     file_count = len(file_ids)
     split_count = math.ceil(file_count / 20)
     split_file_ids = np.array_split(list(file_ids), split_count)
 
     for i, subfile_ids in enumerate(split_file_ids):
         logging.info('crowdin-api pre-translate (%d/%d)' % (i * 20, file_count))
+        print('\n'.join(subfile_ids))
 
         data = {
             'project_id': repository.crowdin.project_id,
-            'engine': 'deepl-translator',
+            'engine': engine,
             'approve_translated': '0',
             'auto_approve_option': '0',
-            'import_duplicates': '0',
             'apply_untranslated_strings_only': '1',
-            'match_relevance': '100',
+            'match_relevance': '0',
             'languages_list': '25',
             'files_list': ','.join(subfile_ids)
         }
@@ -586,20 +564,17 @@ def pre_translate(repository, translation_needed, file_info):
     for file, crowdin_file in sorted(translation_files.items()):
         delete_code_translations(repository, file, file_info)
 
-    translate_with_machine(repository, translation_files.values())
+    translate_with_machine(repository, 'tm', translation_files.values())
+    translate_with_machine(repository, 'deepl-translator', translation_files.values())
 
     file_info = get_crowdin_file_info(repository)
     
     return get_crowdin_file_info(repository)
 
-def pre_translate_folder(repository, folder, candidate_files, file_info):
-    prefix = folder + '/'
+def pre_translate_folder(repository, candidate_files, file_info):
     translation_needed = []
 
     for file in candidate_files:
-        if file.find(prefix) != 0:
-            continue
-
         crowdin_file = get_crowdin_file(repository, file)
 
         if crowdin_file not in file_info:
