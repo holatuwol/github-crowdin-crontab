@@ -19,10 +19,6 @@ import git
 
 username = git.config('files.username')
 password = git.config('files.password')
-
-username_dev = git.config('dev.username')
-password_dev = git.config('dev.password')
-
 json_auth_token = {}
 
 session = requests.session()
@@ -34,16 +30,25 @@ def authenticate(base_url, get_params=None):
     r = session.get(base_url, data=get_params)
 
     if r.url.find('https://login.liferay.com/') == 0:
-        login_okta('login.liferay.com', r.text)
-    elif r.url.find('https://login-dev.liferay.com/') == 0:
-        login_okta('login-dev.liferay.com', r.text)
+        login_okta(r.text)
     elif r.text.find('SAMLRequest') != -1:
         saml_request(r.url, r.text)
     elif len(r.history) > 0 and r.url.find('p_p_id=') != -1:
         url_params = parse.parse_qs(parse.urlparse(r.url).query)
         login_portlet(r.url, url_params, r.text)
 
+def get_liferay_file(base_url, target_file, params=None, method='get'):
+    r = make_liferay_request(base_url, params, method)
+
+    with open(target_file, 'wb') as f:
+        f.write(r.content)
+
 def get_liferay_content(base_url, params=None, method='get'):
+    r = make_liferay_request(base_url, params, method)
+
+    return r.text
+
+def make_liferay_request(base_url, params, method):
     pos = base_url.find('/api/jsonws/')
 
     if pos != -1:
@@ -66,7 +71,7 @@ def get_liferay_content(base_url, params=None, method='get'):
     else:
         r = session.post(base_url, data=params)
 
-    return r.text
+    return r
 
 def saml_request(response_url, response_body):
     soup = BeautifulSoup(response_body, 'html.parser')
@@ -80,19 +85,37 @@ def saml_request(response_url, response_body):
     url_params = parse.parse_qs(parse.urlparse(r.url).query)
 
     if r.url.find('https://login.liferay.com/') == 0:
-        login_okta('login.liferay.com', r.text)
-    elif r.url.find('https://login-dev.liferay.com/') == 0:
-        login_okta('login-dev.liferay.com', r.text)
+        login_okta(r.text)
     elif 'p_p_id' in url_params:
         login_portlet(r.url, url_params, r.text)
     else:
         saml_response(r.url, r.text)
 
-def login_okta(domain, response_text):
+def get_function_end(json_text, start):
+    count = 0
+
+    for i, ch in enumerate(json_text[start:]):
+        if ch == '{':
+            count = count + 1
+        elif ch == '}':
+            count = count - 1
+            if count == 0:
+                return start + i
+
+def login_okta(response_text):
     start = response_text.find('{"redirectUri":')
     end = response_text.find('};', start) + 1
 
-    okta_data = json.loads(response_text[start:end].replace('\\x', '\\u00'))
+    json_text = response_text[start:end].replace('\\x', '\\u00')
+
+    function_start = json_text.find('function(')
+
+    while function_start != -1:
+        function_end = get_function_end(json_text, function_start)
+        json_text = json_text[0:function_start] + '""' + json_text[function_end+1:]
+        function_start = json_text.find('function(')
+
+    okta_data = json.loads(json_text)
 
     # Check the state token
 
@@ -102,7 +125,7 @@ def login_okta(domain, response_text):
         'stateToken': state_token
     }
 
-    r = session.post('https://%s/api/v1/authn' % domain, json=form_params)
+    r = session.post('https://login.liferay.com/api/v1/authn', json=form_params)
 
     request_id = r.headers['X-Okta-Request-Id']
 
@@ -116,7 +139,7 @@ def login_okta(domain, response_text):
 
     # Retrieve the nonce
 
-    r = session.post('https://%s/api/v1/internal/device/nonce' % domain, headers=headers)
+    r = session.post('https://login.liferay.com/api/v1/internal/device/nonce', headers=headers)
 
     # Set the HMAC-SHA256 encoded fingerprint as a header
 
@@ -129,8 +152,8 @@ def login_okta(domain, response_text):
     # Attempt to login
 
     form_params = {
-        'username': ('%s@liferay.com' % username) if domain == 'login.liferay.com' else username_dev,
-        'password': password if domain == 'login.liferay.com' else password_dev,
+        'username': '%s@liferay.com' % username,
+        'password': password,
         'stateToken': state_token,
         'options': {
             'warnBeforePasswordExpired': 'false',
@@ -138,7 +161,7 @@ def login_okta(domain, response_text):
         }
     }
 
-    r = session.post('https://%s/api/v1/authn' % domain, json=form_params, headers=headers)
+    r = session.post('https://login.liferay.com/api/v1/authn', json=form_params, headers=headers)
 
     # Pretend we can follow the login redirect
 
@@ -217,3 +240,5 @@ def get_json_auth_token(base_url):
     json_auth_token[base_url] = p_auth_input['value']
     return json_auth_token[base_url]
 
+if __name__ == '__main__':
+    get_liferay_file(sys.argv[1], sys.argv[2])
