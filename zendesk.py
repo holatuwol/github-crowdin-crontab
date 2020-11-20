@@ -338,10 +338,14 @@ def check_renamed_articles(repository, language, articles, section_paths):
         if old_article_path == new_article_path:
             continue
 
+        if not os.path.exists(old_article_path):
+            continue
+
         os.makedirs(os.path.dirname(new_article_path), exist_ok=True)
         os.rename(old_article_path, new_article_path)
 
         git.add(old_article_path)
+
         git.add(new_article_path)
 
     for article_id, new_article_path in sorted(new_translated_paths.items()):
@@ -351,6 +355,9 @@ def check_renamed_articles(repository, language, articles, section_paths):
         old_article_path = old_translated_paths[article_id]
 
         if old_article_path == new_article_path:
+            continue
+
+        if not os.path.exists(old_article_path):
             continue
 
         os.makedirs(os.path.dirname(new_article_path), exist_ok=True)
