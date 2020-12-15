@@ -262,6 +262,9 @@ def translate_articles(repository, domain, language, articles, article_paths, re
 
         target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
 
+        if not os.path.isfile(target_file):
+            continue
+
         new_title, old_content, new_content = add_disclaimer(article, target_file, language)
 
         if old_content == new_content:

@@ -1,6 +1,7 @@
-from crowdin import delete_translation_folder
+from crowdin import crowdin_request, delete_translation_folder
 from crowdin_sync import update_repository
 from github import is_repository_accessible
+import json
 import os
 import pandas as pd
 from repository import get_repository, initial_dir
@@ -12,10 +13,14 @@ uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
 
 def get_repositories(check_accessible=True):
+    status_code, response_text = crowdin_request(None, '/account/get-projects', 'GET', {'json': 'true'})
+
+    projects = json.loads(response_text)['projects']
+
     repositories_df = pd.read_csv('%s/repositories.csv' % initial_dir, comment='#')
     repositories_df.fillna('', inplace=True)
 
-    repositories = [get_repository(**x) for x in repositories_df.to_dict('records')]
+    repositories = [get_repository(projects, **x) for x in repositories_df.to_dict('records')]
 
     if check_accessible:
         for git_repository, crowdin_repository in repositories:

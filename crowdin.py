@@ -195,18 +195,29 @@ def crowdin_download_translations(repository, refresh_files, file_info):
 
         _crowdin('download', '-l', 'ja')
 
-crowdin_base_url = 'https://api.crowdin.com/api/project/'
+crowdin_base_url = 'https://api.crowdin.com/api'
 
 def crowdin_request(repository, api_path, request_type='GET', data=None, files=None):
     headers = {
         'user-agent': 'python'
     }
 
-    request_url = crowdin_base_url + repository.crowdin.project_name + api_path
+    if repository is None:
+        request_url = crowdin_base_url + api_path
+    else:
+        request_url = crowdin_base_url + '/project/' + repository.crowdin.project_name + api_path
+
+    if repository is None:
+        get_data = {
+            'login': git.config('crowdin.account-login'),
+            'account-key': git.config('crowdin.account-key-v1')
+        }
+    else:
+        get_data = {
+            'key': repository.crowdin.api_key
+        }
     
     if request_type == 'GET':
-        get_data = { 'key': repository.crowdin.api_key }
-
         if data is not None:
             get_data.update(data)
             
@@ -214,7 +225,8 @@ def crowdin_request(repository, api_path, request_type='GET', data=None, files=N
 
         r = requests.get(request_url, data=get_data, headers=headers)
     else:
-        request_url = request_url + '?key=' + repository.crowdin.api_key
+        request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
+
         r = requests.post(request_url, data=data, files=files, headers=headers)
 
     if r.status_code < 200 or r.status_code >= 400:
@@ -564,7 +576,7 @@ def pre_translate(repository, translation_needed, file_info):
     for file, crowdin_file in sorted(translation_files.items()):
         delete_code_translations(repository, file, file_info)
 
-    translate_with_machine(repository, 'tm', translation_files.values())
+    #translate_with_machine(repository, 'tm', translation_files.values())
     translate_with_machine(repository, 'deepl-translator', translation_files.values())
 
     file_info = get_crowdin_file_info(repository)

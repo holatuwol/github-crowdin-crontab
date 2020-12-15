@@ -20,7 +20,7 @@ TranslationRepository = namedtuple(
     ' '.join(['github', 'crowdin'])
 )
 
-def get_repository(git_repository, git_branch, git_folder, project_id, project_name, project_folder, single_folder, delete_enabled):
+def get_repository(projects, git_repository, git_branch, git_folder, project_id, project_name, project_folder, single_folder, delete_enabled):
     single_folder = single_folder.strip()
 
     if len(single_folder) == 0:
@@ -46,10 +46,12 @@ def get_repository(git_repository, git_branch, git_folder, project_id, project_n
     else:
         upstream = upstream_url.split(':')[1][:-4]
 
-    project_api_key = git.config('crowdin.api-key.%s' % project_name)
+    project_api_keys = [project['key'] for project in projects if project['identifier'] == project_name]
 
-    if len(project_api_key) == 0:
+    if len(project_api_keys) == 0:
         project_api_key = None
+    else:
+        project_api_key = project_api_keys[0]
 
     os.chdir(initial_dir)
 
