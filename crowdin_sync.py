@@ -50,11 +50,6 @@ def cleanup_files(repository, all_files, old_file_info, new_file_info):
         elif key in new_keys:
             to_upload.add(local_file)
 
-    # if repository.crowdin.delete_enabled:
-    #     for key in to_delete:
-    #         delete_translation(repository, key)
-    #         del new_file_info[key]
-
     return update_sources(repository, to_upload)
 
 def update_sources(repository, new_files, all_files):
@@ -172,7 +167,7 @@ def check_file_lists(repository, new_files, all_files):
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False):
+def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False, update_sources=True):
     step_number = 1
 
     logging.info('step %d: get repository state for translation download' % step_number)
@@ -185,9 +180,16 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     check_file_lists(repository, new_files, all_files)
 
-    logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
+    if update_sources:
+        logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
 
-    old_file_info, file_info = update_sources(repository, new_files, all_files)
+        old_file_info, file_info = update_sources(repository, new_files, all_files)
+    else:
+        logging.info('step %d: check for translations of %d source files' % (step_number, len(new_files)))
+
+        crowdin_download_translations(repository, all_files, file_info)
+
+        old_file_info = file_info
 
     if create_issues:
         logging.info('step %d: generate github issues' % step_number)

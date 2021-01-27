@@ -7,7 +7,7 @@ import pandas as pd
 from repository import get_repository, initial_dir
 import sys
 import time
-from zendesk import update_zendesk_articles
+from zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin
 
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
@@ -70,7 +70,8 @@ def execute_job(domain, git_repository, git_folder):
     repository = check_repositories[0]
 
     if repository.github.origin == 'holatuwol/zendesk-articles':
-        update_zendesk_articles(repository, domain, 'ja')
+        copy_crowdin_to_zendesk(repository, domain, 'ja')
+        #copy_zendesk_to_crowdin(repository, domain, 'ja')
     else:
         print(repository)
 

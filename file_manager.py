@@ -28,10 +28,16 @@ def get_root_folders(repository, candidate_files):
     return root_folders
 
 def get_crowdin_file(repository, local_file):
-    return repository.crowdin.dest_folder + '/' + local_file[len(repository.github.project_folder)+1:]
+    if local_file.find(repository.github.project_folder) == 0:
+        return repository.crowdin.dest_folder + '/' + local_file[len(repository.github.project_folder)+1:]
+
+    return None
 
 def get_local_file(repository, crowdin_file):
-    return repository.github.project_folder + crowdin_file[len(repository.crowdin.dest_folder):]
+    if crowdin_file.find(repository.crowdin.dest_folder) == 0:
+        return repository.github.project_folder + crowdin_file[len(repository.crowdin.dest_folder):]
+
+    return None
 
 def get_files(folder):
     files = []

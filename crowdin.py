@@ -515,6 +515,7 @@ def delete_code_translations(repository, file_name, file_info):
 
     def is_within_code_tag(x):
         return x.text and x.text.find('[TOC') == 0 or \
+            x.text and x.text.find('CVSS') != -1 and x.text.find('CVE') != -1 or \
             x.name == 'code' or x.name == 'pre' or \
             x.find_parent('code') is not None or x.find_parent('pre') is not None or \
             x.find_parent(attrs={'id': 'front-matter'}) is not None
