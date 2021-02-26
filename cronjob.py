@@ -41,7 +41,11 @@ def list_jobs():
         git_repository = git_root[git_root.rfind('/')+1:]
         git_folder = repository.github.project_folder if repository.github.single_folder is None else repository.github.single_folder
 
-        print('  python %s %s %s' % (sys.argv[0], git_repository, git_folder))
+        if repository.github.origin == 'holatuwol/zendesk-articles':
+            print('  python %s %s %s crowdin' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s zendesk' % (sys.argv[0], git_repository, git_folder))
+        else:
+            print('  python %s %s %s' % (sys.argv[0], git_repository, git_folder))
 
 def execute_job(domain, git_repository, git_folder):
     all_repositories = get_repositories(False)
@@ -70,8 +74,14 @@ def execute_job(domain, git_repository, git_folder):
     repository = check_repositories[0]
 
     if repository.github.origin == 'holatuwol/zendesk-articles':
-        copy_crowdin_to_zendesk(repository, domain, 'ja')
-        #copy_zendesk_to_crowdin(repository, domain, 'ja')
+        if len(sys.argv) == 3:
+            print('invalid target of zendesk sync (crowdin, zendesk)')
+        elif sys.argv[3] == 'crowdin':
+            copy_zendesk_to_crowdin(repository, domain, 'ja')
+        elif sys.argv[3] == 'zendesk':
+            copy_crowdin_to_zendesk(repository, domain, 'ja')
+        else:
+            print('invalid target of zendesk sync (crowdin, zendesk)')
     else:
         print(repository)
 

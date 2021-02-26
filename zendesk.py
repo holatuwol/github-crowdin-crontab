@@ -28,6 +28,7 @@ def get_article_id(file):
 
 def zendesk_json_request(domain, api_path, attribute_name, request_type, json_params):
     auth_headers = {
+        'Content-Type': 'application/json',
         'Authorization': 'Bearer %s' % git.config('%s.token' % domain)
     }
 
@@ -48,9 +49,12 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
 
     if attribute_name in api_result:
         return api_result[attribute_name]
-    else:
-        print(r.text)
+
+    if 'error' in api_result and api_result['error'] == 'RecordNotFound':
         return None
+
+    print(r.text)
+    exit()
 
 # Create a method to make requests against the ZenDesk API, working around a
 # bug in the ZenDesk incremental API: normally, API expects you to be able to
@@ -247,11 +251,11 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
     if refresh_articles is not None:
         logging.info('Updating translations for %d articles' % len(refresh_paths))
 
-        new_files, all_files, file_info = update_repository(repository, list(refresh_paths.values()), update_sources=True)
+        new_files, all_files, file_info = update_repository(repository, list(refresh_paths.values()), sync_sources=True)
     else:
         logging.info('Downloading latest translations for %d articles' % len(article_paths))
 
-        new_files, all_files, file_info = update_repository(repository, list(article_paths.values()), update_sources=False)
+        new_files, all_files, file_info = update_repository(repository, list(article_paths.values()), sync_sources=False)
 
     old_dir = os.getcwd()
 
@@ -271,6 +275,10 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
             continue
 
         crowdin_file = get_crowdin_file(repository, file)
+
+        if crowdin_file not in file_info:
+            continue
+
         file_metadata = file_info[crowdin_file]
 
         if file_metadata['phrases'] != file_metadata['translated']:
@@ -298,56 +306,43 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
     return file_info
 
 def copy_crowdin_to_zendesk(repository, domain, language):
-    # Fetch the categories and sections
-
-    categories = get_categories(domain, language)
-    sections = get_sections(domain, language)
-
-    section_paths = {
-        section_id: '%s%s' % (categories[str(section['category_id'])]['name'], section['html_url'][section['html_url'].rfind('/'):])
-            for section_id, section in sorted(sections.items())
-    }
-
-    # Reload the articles we already know about
-
-    articles = {}
-
-    try:
-        with open('%s/articles_%s.json' % (initial_dir, domain), 'r') as f:
-            articles = json.load(f)
-    except:
-        pass
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, language)
 
     old_dir = os.getcwd()
-
-    os.chdir(repository.github.git_root)
-    start_hash = git.log('-1', '--pretty=%H')
-    os.chdir(old_dir)
 
     article_paths = check_renamed_articles(repository, language, articles, section_paths)
 
     file_info = sync_articles(repository, domain, language, articles, article_paths)
 
-    os.chdir(repository.github.git_root)
-    updated_files = git.diff(start_hash, '--name-only')
-    os.chdir(old_dir)
+    updated_source_files = [
+        article_paths[article_id]
+            for article_id, article in articles.items()
+                if 'crowdin_sync_at' not in article
+    ]
 
-    updated_files = get_eligible_files(repository, updated_files, language)
+    updated_target_files = [
+        language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+            for file in updated_source_files
+    ]
 
     missing_language_article_ids = [article['id'] for article in articles.values() if language not in article['label_names']]
 
-    logging.info('%d updated files, %d missing %s label' % (len(updated_files), len(missing_language_article_ids), language))
+    logging.info('%d updated files, %d missing %s label' % (len(updated_target_files), len(missing_language_article_ids), language))
 
     # Identify the articles which were added to the Git index and send them to Zendesk
+
+    os.chdir(repository.github.git_root)
 
     for article_id, file in sorted(article_paths.items()):
         article = articles[article_id]
         target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
 
-        if language in article['label_names'] and target_file not in updated_files:
+        if language in article['label_names'] and target_file not in updated_target_files:
             continue
 
-        #update_zendesk_translation(repository, domain, article, file, language)
+        update_zendesk_translation(repository, domain, article, file, language)
+
+    os.chdir(old_dir)
 
 def copy_zendesk_to_crowdin(repository, domain, language):
     articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, language)

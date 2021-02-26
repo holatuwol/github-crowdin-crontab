@@ -6,8 +6,10 @@ import inspect
 import json
 import os
 from os.path import abspath, dirname, isdir, isfile, join, relpath
+import re
 import requests
 import sys
+from tqdm import tqdm
 
 try:
     from urllib import parse
@@ -37,18 +39,32 @@ def authenticate(base_url, get_params=None):
         url_params = parse.parse_qs(parse.urlparse(r.url).query)
         login_portlet(r.url, url_params, r.text)
 
-def get_liferay_file(base_url, target_file, params=None, method='get'):
-    r = make_liferay_request(base_url, params, method)
+def get_liferay_file(base_url, target_file=None, params=None, method='get'):
+    r = make_liferay_request(base_url, params, method, True)
+    total = int(r.headers.get('content-length', 0))
+    progress_bar = tqdm(total=total, unit='iB', unit_scale=True)
+
+    if target_file is None:
+        filenames = re.findall('filename="([^"]*)"', r.headers.get('content-disposition', ''))
+
+        if len(filenames) == 0:
+            target_file = 'untitled'
+        else:
+            target_file = filenames[0]
 
     with open(target_file, 'wb') as f:
-        f.write(r.content)
+        for chunk in r.iter_content(chunk_size=8192):
+            progress_bar.update(len(chunk))
+            f.write(chunk)
+
+    return target_file
 
 def get_liferay_content(base_url, params=None, method='get'):
     r = make_liferay_request(base_url, params, method)
 
     return r.text
 
-def make_liferay_request(base_url, params, method):
+def make_liferay_request(base_url, params, method, stream=False):
     pos = base_url.find('/api/jsonws/')
 
     if pos != -1:
@@ -67,7 +83,7 @@ def make_liferay_request(base_url, params, method):
             else:
                 full_url = '%s&%s' % (base_url, query_string)
 
-        r = session.get(full_url, data=params)
+        r = session.get(full_url, data=params, stream=stream)
     else:
         r = session.post(base_url, data=params)
 
@@ -241,4 +257,4 @@ def get_json_auth_token(base_url):
     return json_auth_token[base_url]
 
 if __name__ == '__main__':
-    get_liferay_file(sys.argv[1], sys.argv[2])
+    print(get_liferay_file(sys.argv[1]))

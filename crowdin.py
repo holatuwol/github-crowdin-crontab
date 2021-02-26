@@ -345,12 +345,10 @@ def wait_for_translation(repository):
 
 def translate_with_machine(repository, engine, file_ids):
     file_count = len(file_ids)
-    split_count = math.ceil(file_count / 20)
-    split_file_ids = np.array_split(list(file_ids), split_count)
 
-    for i, subfile_ids in enumerate(split_file_ids):
-        logging.info('crowdin-api pre-translate (%d/%d)' % (i * 20, file_count))
-        print('\n'.join(subfile_ids))
+    for i, file_id in enumerate(file_ids.keys()):
+        logging.info('crowdin-api pre-translate %s (%d/%d)' % (engine, i + 1, file_count))
+        print(file_ids[file_id])
 
         data = {
             'project_id': repository.crowdin.project_id,
@@ -360,7 +358,7 @@ def translate_with_machine(repository, engine, file_ids):
             'apply_untranslated_strings_only': '1',
             'match_relevance': '0',
             'languages_list': '25',
-            'files_list': ','.join(subfile_ids)
+            'files_list': file_id
         }
 
         response = crowdin_http_request(
@@ -370,8 +368,6 @@ def translate_with_machine(repository, engine, file_ids):
 
         if response_data['success']:
             wait_for_translation(repository)
-
-    logging.info('crowdin-api pre-translate (%d/%d)' % (file_count, file_count))
 
 csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
 
@@ -560,49 +556,47 @@ def delete_code_translations(repository, file_name, file_info):
 
     return True
 
-def pre_translate(repository, translation_needed, file_info):
+def get_file_ids(repository, files, file_info):
     candidate_files = {
-        file: get_crowdin_file(repository, file) for file in translation_needed
+        file: get_crowdin_file(repository, file) for file in files
     }
 
-    translation_files = {
+    return {
         file: file_info[crowdin_file]['id']
             for file, crowdin_file in candidate_files.items()
                 if crowdin_file in file_info
     }
 
-    if len(translation_files) == 0:
-        return
+def pre_translate(repository, code_check_needed, translation_needed, file_info):
+    code_check_needed_file_ids = get_file_ids(repository, code_check_needed, file_info)
 
-    for file, crowdin_file in sorted(translation_files.items()):
-        delete_code_translations(repository, file, file_info)
+    for file, crowdin_file in sorted(code_check_needed_file_ids.items()):
+        file_metadata = file_info[get_crowdin_file(repository, file)]
 
-    #translate_with_machine(repository, 'tm', translation_files.values())
-    translate_with_machine(repository, 'deepl-translator', translation_files.values())
+        if file_metadata['phrases'] != file_metadata['translated']:
+            delete_code_translations(repository, file, file_info)
+
+    translation_needed_file_ids = get_file_ids(repository, translation_needed, file_info)
+
+    missing_phrases_files = {}
+
+    for file, crowdin_file in sorted(translation_needed_file_ids.items()):
+        file_metadata = file_info[get_crowdin_file(repository, file)]
+
+        if file_metadata['phrases'] != file_metadata['translated']:
+            missing_phrases_files[crowdin_file] = crowdin_file
+            print('%s (%s != %s)' % (file, file_metadata['phrases'], file_metadata['translated']))
+        else:
+            print('%s (%s == %s)' % (file, file_metadata['phrases'], file_metadata['translated']))
+
+    if len(missing_phrases_files) > 0:
+        #translate_with_machine(repository, 'tm', missing_phrases_files)
+        translate_with_machine(repository, 'deepl-translator', missing_phrases_files)
+        translate_with_machine(repository, 'google-translate', missing_phrases_files)
 
     file_info = get_crowdin_file_info(repository)
     
     return get_crowdin_file_info(repository)
-
-def pre_translate_folder(repository, candidate_files, file_info):
-    translation_needed = []
-
-    for file in candidate_files:
-        crowdin_file = get_crowdin_file(repository, file)
-
-        if crowdin_file not in file_info:
-            logging.info('%s was not uploaded to crowdin' % crowdin_file)
-            continue
-
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if not os.path.isfile(target_file):
-            translation_needed.append(file)
-
-    if len(translation_needed) > 0:
-        file_info = pre_translate(repository, translation_needed, file_info)
-
-    return file_info
 
 def get_orphaned_files(repository, update_result):
     new_files, all_files, file_info = update_result

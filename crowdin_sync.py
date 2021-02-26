@@ -57,21 +57,8 @@ def update_sources(repository, new_files, all_files):
 
     update_files = set(new_files)
 
-    for crowdin_file_name, metadata in [(key, value) for key, value in file_info.items() if key.find(repository.crowdin.single_folder) == 0 and 'id' in value]:
-        if metadata['translated'] == metadata['phrases']:
-            continue
-
-        file = get_local_file(repository, crowdin_file_name)
-
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if os.path.isfile(target_file):
-            os.remove(target_file)
-
-        update_files.add(file)
-
     if repository.crowdin.delete_enabled:
-        file_info = pre_translate(repository, update_files, file_info)
+        file_info = pre_translate(repository, update_files, all_files, file_info)
     else:
         for file in update_files:
             delete_code_translations(repository, file, file_info)
@@ -167,7 +154,7 @@ def check_file_lists(repository, new_files, all_files):
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False, update_sources=True):
+def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False, sync_sources=True):
     step_number = 1
 
     logging.info('step %d: get repository state for translation download' % step_number)
@@ -180,7 +167,7 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     check_file_lists(repository, new_files, all_files)
 
-    if update_sources:
+    if sync_sources:
         logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
 
         old_file_info, file_info = update_sources(repository, new_files, all_files)
