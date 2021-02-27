@@ -9,4 +9,4 @@ RUN apt-get update && \
 
 USER jovyan
 
-RUN conda install -y bs4 requests
+RUN conda install -y bs4 requests tqdm
