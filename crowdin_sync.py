@@ -162,6 +162,28 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     new_files, all_files, file_info = get_repository_state(repository, refresh_paths, check_upstream)
 
+    empty_files = []
+
+    if not sync_sources:
+        all_files = []
+
+        for crowdin_file, metadata in file_info.items():
+            if 'id' in metadata:
+                local_file = get_local_file(repository, crowdin_file)
+                local_folder = os.path.dirname(local_file)
+
+                if not os.path.isdir(local_folder):
+                    os.makedirs(local_folder)
+
+                if not os.path.isfile(local_file):
+                    empty_files.append(local_file)
+                    with open(local_file, 'w') as temp_file:
+                        pass
+
+                all_files.append(local_file)
+
+        new_files = all_files
+
     logging.info('step %d: check for existing translations of %d files' % (step_number, len(all_files)))
     step_number = step_number + 1
 
@@ -198,6 +220,9 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
 
     save_translation_memory(repository)
     save_glossary(repository)
+
+    for file in empty_files:
+        os.remove(file)
 
     logging.info('cd -')
     os.chdir(initial_dir)

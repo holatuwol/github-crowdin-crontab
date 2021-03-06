@@ -45,9 +45,10 @@ def list_jobs():
             print('  python %s %s %s crowdin' % (sys.argv[0], git_repository, git_folder))
             print('  python %s %s %s zendesk' % (sys.argv[0], git_repository, git_folder))
         else:
-            print('  python %s %s %s' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s upload' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s download' % (sys.argv[0], git_repository, git_folder))
 
-def execute_job(domain, git_repository, git_folder):
+def execute_job(domain, git_repository, git_folder, direction):
     all_repositories = get_repositories(False)
 
     check_repositories = []
@@ -74,24 +75,29 @@ def execute_job(domain, git_repository, git_folder):
     repository = check_repositories[0]
 
     if repository.github.origin == 'holatuwol/zendesk-articles':
-        if len(sys.argv) == 3:
-            print('invalid target of zendesk sync (crowdin, zendesk)')
-        elif sys.argv[3] == 'crowdin':
+        if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'ja')
-        elif sys.argv[3] == 'zendesk':
+        elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'ja')
         else:
             print('invalid target of zendesk sync (crowdin, zendesk)')
     else:
+        if direction == 'upload':
+            sync_sources = True
+        elif direction == 'download':
+            sync_sources = False
+        else:
+            print('invalid target of crowdin sync (upload, download)')
+
         print(repository)
 
         value = input('continue (y/n): ')
 
         if value == 'y':
-            update_repository(repository)
+            update_repository(repository, sync_sources=sync_sources)
 
 if __name__ == '__main__':
-    if len(sys.argv) == 1:
+    if len(sys.argv) < 4:
         list_jobs()
     else:
-        execute_job(prod_domain, sys.argv[1], sys.argv[2])
+        execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3])

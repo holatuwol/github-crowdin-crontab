@@ -278,7 +278,7 @@ def delete_translation_folder(repository):
 
     return crowdin_request(repository, '/delete-directory', 'POST', data)
 
-def extract_crowdin_file_info(files_element, current_path, file_info):
+def extract_crowdin_file_info(repository, files_element, current_path, file_info):
     for item in files_element.children:
         if item.name != 'item':
             continue
@@ -288,16 +288,18 @@ def extract_crowdin_file_info(files_element, current_path, file_info):
 
         item_path = current_path + '/' + item_name if current_path is not None else item_name
 
-        file_info[item_path] = {
-            'phrases': int(item.find('phrases').text),
-            'translated': int(item.find('translated').text),
-            'approved': int(item.find('approved').text)
-        }
+        if item_path.find(repository.crowdin.dest_folder) == 0:
+            file_info[item_path] = {
+                'phrases': int(item.find('phrases').text),
+                'translated': int(item.find('translated').text),
+                'approved': int(item.find('approved').text)
+            }
 
-        if item_node_type == 'file':
-            file_info[item_path]['id'] = item.find('id').text
-        else:
-            extract_crowdin_file_info(item.find('files'), item_path, file_info)
+            if item_node_type == 'file':
+                file_info[item_path]['id'] = item.find('id').text
+
+        if item_node_type != 'file':
+            extract_crowdin_file_info(repository, item.find('files'), item_path, file_info)
 
 def get_crowdin_file_info(repository):
     logging.info('crowdin-api language-status')
@@ -313,7 +315,7 @@ def get_crowdin_file_info(repository):
 
     if response_content is not None:
         soup = BeautifulSoup(response_content, features='html.parser')
-        extract_crowdin_file_info(soup.find('files'), None, file_info)
+        extract_crowdin_file_info(repository, soup.find('files'), None, file_info)
 
     return file_info
 
