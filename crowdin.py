@@ -22,7 +22,12 @@ next_export = None
 def _crowdin(*args):
     global next_export
 
-    cmd = ['java', '-Duser.dir=%s' % os.getcwd(), '-jar', '/usr/lib/crowdin/crowdin-cli.jar'] + list(args)
+    crowdin_cli_jar = '/usr/lib/crowdin/crowdin-cli.jar'
+
+    if not os.path.isfile(crowdin_cli_jar):
+        crowdin_cli_jar = '/usr/local/bin/crowdin-cli.jar'
+
+    cmd = ['java', '-Duser.dir=%s' % os.getcwd(), '-jar', crowdin_cli_jar] + list(args)
 
     if args[0] == 'download' and next_export is not None:
         sleep_time = (next_export - datetime.now()).total_seconds()
