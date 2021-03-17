@@ -312,7 +312,7 @@ def copy_crowdin_to_zendesk(repository, domain, language):
 
     article_paths = check_renamed_articles(repository, language, articles, section_paths)
 
-    file_info = sync_articles(repository, domain, language, articles, article_paths)
+    file_info = sync_articles(repository, domain, language, articles, {})
 
     updated_source_files = [
         article_paths[article_id]
