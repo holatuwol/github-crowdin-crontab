@@ -36,6 +36,9 @@ def list_jobs():
     print('Valid commands:')
 
     for repository in all_repositories:
+        if repository is None:
+            continue
+
         git_root = repository.github.git_root
 
         git_repository = git_root[git_root.rfind('/')+1:]

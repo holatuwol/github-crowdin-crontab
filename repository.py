@@ -32,6 +32,9 @@ def get_repository(projects, git_repository, git_branch, git_folder, project_id,
     
     git_root = os.path.dirname(initial_dir) + '/' + git_repository
 
+    if not os.path.isdir(git_root):
+        return None
+
     os.chdir(git_root)
 
     logging.info(git_root)
