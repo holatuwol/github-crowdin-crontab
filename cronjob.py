@@ -57,6 +57,9 @@ def execute_job(domain, git_repository, git_folder, direction):
     check_repositories = []
 
     for repository in all_repositories:
+        if repository is None:
+            continue
+
         git_root = repository.github.git_root
 
         if git_root[git_root.rfind('/')+1:] != git_repository:
