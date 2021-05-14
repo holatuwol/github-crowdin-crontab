@@ -2,7 +2,7 @@ from crowdin import crowdin_request, delete_translation_folder
 from crowdin_sync import update_repository
 from github import is_repository_accessible
 import json
-from liferay_learn import copy_crowdin_to_learn, copy_learn_to_crowdin
+from liferay_learn import add_disclaimers_to_learn, copy_crowdin_to_learn, copy_learn_to_crowdin
 import os
 import pandas as pd
 from repository import get_repository, initial_dir
@@ -52,6 +52,9 @@ def list_jobs():
             print('  python %s %s %s upload' % (sys.argv[0], git_repository, git_folder))
             print('  python %s %s %s download' % (sys.argv[0], git_repository, git_folder))
 
+            if repository.github.upstream == 'liferay/liferay-learn':
+                print('  python %s %s %s disclaimer' % (sys.argv[0], git_repository, git_folder))
+
 def execute_job(domain, git_repository, git_folder, direction):
     all_repositories = get_repositories(False)
 
@@ -81,7 +84,7 @@ def execute_job(domain, git_repository, git_folder, direction):
 
     repository = check_repositories[0]
 
-    if repository.github.upstream == 'liferay/zendesk-articles':
+    if repository.github.origin == 'holatuwol/zendesk-articles':
         if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'ja')
         elif direction == 'zendesk':
@@ -95,8 +98,10 @@ def execute_job(domain, git_repository, git_folder, direction):
             copy_learn_to_crowdin(repository, 'ja')
         elif direction == 'download':
             copy_crowdin_to_learn(repository, 'ja')
+        elif direction == 'disclaimer':
+            add_disclaimers_to_learn(repository, 'ja')
         else:
-            print('invalid target of learn sync (upload, download)')
+            print('invalid target of learn sync (upload, download, disclaimer)')
     else:
         if direction == 'upload':
             sync_sources = True
