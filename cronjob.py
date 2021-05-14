@@ -2,6 +2,7 @@ from crowdin import crowdin_request, delete_translation_folder
 from crowdin_sync import update_repository
 from github import is_repository_accessible
 import json
+from liferay_learn import copy_crowdin_to_learn, copy_learn_to_crowdin
 import os
 import pandas as pd
 from repository import get_repository, initial_dir
@@ -80,13 +81,22 @@ def execute_job(domain, git_repository, git_folder, direction):
 
     repository = check_repositories[0]
 
-    if repository.github.origin == 'holatuwol/zendesk-articles':
+    if repository.github.upstream == 'liferay/zendesk-articles':
         if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'ja')
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'ja')
         else:
             print('invalid target of zendesk sync (crowdin, zendesk)')
+    elif repository.github.upstream == 'liferay/liferay-learn':
+        print(repository)
+
+        if direction == 'upload':
+            copy_learn_to_crowdin(repository, 'ja')
+        elif direction == 'download':
+            copy_crowdin_to_learn(repository, 'ja')
+        else:
+            print('invalid target of learn sync (upload, download)')
     else:
         if direction == 'upload':
             sync_sources = True

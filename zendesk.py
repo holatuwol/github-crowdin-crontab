@@ -1,6 +1,7 @@
 from collections import defaultdict
 from crowdin_sync import update_repository
 from datetime import datetime
+from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
 from file_manager import get_eligible_files, get_crowdin_file
 import git
 import json
@@ -10,14 +11,6 @@ import os
 import pandas as pd
 from repository import initial_dir
 from scrape_liferay import authenticate, session
-
-disclaimer_text = '''
-<aside class="alert alert-info"><span class="wysiwyg-color-blue120">
-ご覧のページは、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、<a href="mailto:support-content-jp@liferay.com">こちら</a>までご連絡ください。
-</span></aside>
-'''
-
-disclaimer_text_no_newline = disclaimer_text.replace('\n', '').strip()
 
 def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
@@ -700,7 +693,7 @@ def requires_update(repository, domain, article, language, file):
             logging.info('%s (deleted article)' % article['id'])
             return False
 
-        missing_disclaimer = mt_article['body'].find(disclaimer_text.strip()) == -1
+        missing_disclaimer = mt_article['body'].find(disclaimer_html.strip()) == -1
 
     if missing_disclaimer:
         logging.info('%s (missing MT disclaimer)' % article['id'])
@@ -709,41 +702,7 @@ def requires_update(repository, domain, article, language, file):
     logging.info('%s (outdated, but text matches)' % article['id'])
     return False
 
-def add_disclaimer(article, file, language):
-    with open(file, 'r') as f:
-        lines = f.readlines()
-
-    new_title = lines[0][4:-6]
-    old_content = ''.join(lines[1:]).strip()
-
-    if lines[1].strip() == '<p class="alert alert-info"><span class="wysiwyg-color-blue120">':
-        new_content = ''.join(lines[4:]).strip()
-    if lines[1].strip() == '<aside class="alert alert-info"><span class="wysiwyg-color-blue120">':
-        new_content = ''.join(lines[4:]).strip()
-    elif len(lines) > 2 and lines[2].strip() == '<p class="alert alert-info"><span class="wysiwyg-color-blue120">':
-        new_content = ''.join(lines[5:]).strip()
-    elif len(lines) > 2 and lines[2].strip() == '<aside class="alert alert-info"><span class="wysiwyg-color-blue120">':
-        new_content = ''.join(lines[5:]).strip()
-    else:
-        new_content = ''.join(lines[1:]).strip()
-
-    if new_content.find('<aside class="alert alert-info"><span class="wysiwyg-color-blue120">') != -1:
-        new_content = new_content[new_content.find('</span></aside>')+15:].strip()
-
-    script_disclaimer = new_content.find('var disclaimerElement')
-
-    if script_disclaimer != -1:
-        script_disclaimer = new_content.rfind('<script>', 0, script_disclaimer)
-        new_content = new_content[0:script_disclaimer].strip()
-
-    if 'mt' in article['label_names'] and language is not None and language != 'en':
-        new_content = (disclaimer_text + new_content).strip()
-
-    return new_title, old_content, new_content
-
 def update_zendesk_translation(repository, domain, article, file, language):
-    global disclaimer_text
-
     target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
 
     if not os.path.exists(target_file):
