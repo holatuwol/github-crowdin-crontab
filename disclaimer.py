@@ -16,7 +16,7 @@ def add_disclaimer_learn(file, language):
     with open(file, 'r') as f:
         lines = f.readlines()
 
-    start_pos = 1
+    start_pos = 2
 
     if lines[1].find('==') == 0:
         start_pos = 3
