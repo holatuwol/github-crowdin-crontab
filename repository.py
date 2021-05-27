@@ -40,12 +40,19 @@ def get_repository(projects, git_repository, git_branch, git_folder, project_id,
     logging.info(git_root)
 
     origin_url = git.remote('get-url', 'origin')
-    origin = origin_url.split(':')[1][:-4]
+
+    if origin_url.find('https://') == 0:
+        origin = origin_url[origin_url.find('/', 8)+1:origin_url.rfind('.')]
+    else:
+        origin = origin_url.split(':')[1][:-4]
 
     upstream_url = git.remote('get-url', 'upstream')
-    
+
     if len(upstream_url) == 0:
         upstream = None
+    elif upstream_url.find('https://') == 0:
+        upstream = upstream_url[upstream_url.find('/', 8)+1:upstream_url.rfind('.')]
+        print(upstream)
     else:
         upstream = upstream_url.split(':')[1][:-4]
 
