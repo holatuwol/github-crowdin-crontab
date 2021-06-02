@@ -280,7 +280,7 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
             git.checkout(target_file)
             continue
 
-        new_title, old_content, new_content = add_disclaimer(article, target_file, language)
+        new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
 
         if old_content != new_content:
             with open(target_file, 'w') as f:
@@ -682,7 +682,7 @@ def requires_update(repository, domain, article, language, file):
     # check if it's missing a disclaimer
 
     missing_disclaimer = True
-    new_title, old_content, new_content = add_disclaimer(article, target_file, language)
+    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
 
     if old_content == new_content:
         missing_disclaimer = False
@@ -693,7 +693,7 @@ def requires_update(repository, domain, article, language, file):
             logging.info('%s (deleted article)' % article['id'])
             return False
 
-        missing_disclaimer = mt_article['body'].find(disclaimer_html.strip()) == -1
+        missing_disclaimer = mt_article['body'].find(disclaimer_zendesk.strip()) == -1
 
     if missing_disclaimer:
         logging.info('%s (missing MT disclaimer)' % article['id'])
@@ -738,7 +738,7 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
     # Check if the translation needs an update
 
-    new_title, old_content, new_content = add_disclaimer(article, target_file, language)
+    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
 
     logging.info('%s (updating translation)' % article['id'])
 
