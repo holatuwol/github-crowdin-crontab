@@ -730,7 +730,11 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
         api_path = '/help_center/articles/%s.json' % article['id']
 
-        zendesk_json_request(domain, api_path, 'article', 'PUT', json_params)
+        try:
+            zendesk_json_request(domain, api_path, 'article', 'PUT', json_params)
+        except:
+            print('Error updating labels for article %s' % article['id'])
+            return False
 
     # Check if the translation needs an update
 
@@ -745,6 +749,7 @@ def update_zendesk_translation(repository, domain, article, file, language):
     try:
         missing_locales = zendesk_get_request(domain, api_path, 'locales')
     except:
+        print('Error fetching missing locales for article %s' % article['id'])
         return False
 
     if missing_locales is None or language in missing_locales:
@@ -758,7 +763,11 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
         api_path = '/help_center/articles/%s/translations.json' % article['id']
 
-        zendesk_json_request(domain, api_path, 'translation', 'POST', json_params)
+        try:
+            zendesk_json_request(domain, api_path, 'translation', 'POST', json_params)
+        except:
+            print('Error adding new translation for article %s' % article['id'])
+            return False
     else:
         json_params = {
             'translation': {
@@ -769,6 +778,10 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
         api_path = '/help_center/articles/%s/translations/%s.json' % (article['id'], language)
 
-        zendesk_json_request(domain, api_path, 'translation', 'PUT', json_params)
+        try:
+            zendesk_json_request(domain, api_path, 'translation', 'PUT', json_params)
+        except:
+            print('Error updating translation for article %s' % article['id'])
+            return False
 
     return True
