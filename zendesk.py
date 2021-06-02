@@ -38,6 +38,10 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
     else:
         return None
 
+    if r.text is None:
+        print('No response (status code %d)' % r.status_code)
+        return None
+
     api_result = json.loads(r.text)
 
     if attribute_name in api_result:
@@ -46,7 +50,7 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
     if 'error' in api_result and api_result['error'] == 'RecordNotFound':
         return None
 
-    print(r.text)
+    print('%d, %s' % (r.status_code, r.text))
     exit()
 
 # Create a method to make requests against the ZenDesk API, working around a
