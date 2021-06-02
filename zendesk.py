@@ -38,11 +38,11 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
     else:
         return None
 
-    if r.text is None:
-        print('No response (status code %d)' % r.status_code)
+    try:
+        api_result = json.loads(r.text)
+    except:
+        print('%d, %s' % (r.status_code, r.text))
         return None
-
-    api_result = json.loads(r.text)
 
     if attribute_name in api_result:
         return api_result[attribute_name]
