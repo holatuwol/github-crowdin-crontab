@@ -713,6 +713,10 @@ def update_zendesk_translation(repository, domain, article, file, language):
         print('%s (skipping translation not available on file system)' % article['id'])
         return False
 
+    if language in article['label_names'] and 'mt' not in article['label_names']:
+        print('%s (skipping translation, not supposed to be updated since it was manually translated)' % article['id'])
+        return False
+
     # Update the labels
 
     update_labels = False
