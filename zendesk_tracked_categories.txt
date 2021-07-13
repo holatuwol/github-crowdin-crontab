@@ -1,5 +1,6 @@
 Announcements
 Knowledge Base
 Support Coverage
+Liferay DXP Cloud Announcements
 Liferay DXP Cloud Knowledge Base
 Liferay DXP 7.3
