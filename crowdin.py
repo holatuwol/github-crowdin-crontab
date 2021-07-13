@@ -371,7 +371,12 @@ def translate_with_machine(repository, engine, file_ids):
         response = crowdin_http_request(
             repository, '/backend/project_actions/pre_translate', 'POST', **data)
 
-        response_data = json.loads(response.decode('utf-8'))
+        response_text = response.decode('utf-8')
+
+        try:
+            response_data = json.loads(response_text)
+        except:
+            print(response_text)
 
         if response_data['success']:
             wait_for_translation(repository)
