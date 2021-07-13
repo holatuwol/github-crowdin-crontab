@@ -435,7 +435,17 @@ def crowdin_http_request(repository, path, method, **data):
     }
 
     r = session.post(login_url, data=login_data)
-    
+
+    if r.text.find('/remember-me/decline') != -1:
+        soup = BeautifulSoup(r.text, features='html.parser')
+        token_input = soup.find('input', attrs={'name': '_token'})
+
+        login_data = {
+            '_token': token_input.attrs['value']
+        }
+
+        r = session.post('https://accounts.crowdin.com/remember-me/decline', data=login_data)
+
     return crowdin_http_request(repository, path, method, **data)
 
 # Mass delete suggestions
