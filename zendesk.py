@@ -454,9 +454,11 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
             'category': category['title_' + language],
             'section': section['title_' + language],
             'title': title,
-            'translated_at': article['translated_at'],
             'mt': 'mt' in article['label_names']
         }
+
+        if 'translated_at' in article:
+            article_metadata[article_id]['translated_at'] = article['translated_at']
 
     with open('translations.json', 'w') as f:
         json.dump(article_metadata, f, separators=(',', ':'))
