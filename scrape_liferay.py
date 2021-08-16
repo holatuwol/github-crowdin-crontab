@@ -1,11 +1,14 @@
 
 from bs4 import BeautifulSoup
+from getpass import getpass
 import hashlib
 import hmac
 import inspect
 import json
+import math
 import os
 from os.path import abspath, dirname, isdir, isfile, join, relpath
+import pickle
 import re
 import requests
 import sys
@@ -20,17 +23,19 @@ except:
 sys.path.insert(0, dirname(dirname(abspath(inspect.getfile(inspect.currentframe())))))
 import git
 
-username = git.config('files.username')
-password = git.config('files.password')
 json_auth_token = {}
 
-session = requests.session()
+if os.path.isfile('session.ser'):
+    with open('session.ser', 'rb') as f:
+        session = pickle.load(f)
+else:
+    session = requests.session()
 
 def get_namespaced_parameters(portlet_id, parameters):
     return { ('_%s_%s' % (portlet_id, key)) : value for key, value in parameters.items() }
 
 def authenticate(base_url, get_params=None):
-    r = session.get(base_url, data=get_params)
+    r = session.get(base_url, data=get_params, verify=False)
 
     if r.url.find('https://login.liferay.com/') == 0:
         login_okta(r.text)
@@ -39,6 +44,9 @@ def authenticate(base_url, get_params=None):
     elif len(r.history) > 0 and r.url.find('p_p_id=') != -1:
         url_params = parse.parse_qs(parse.urlparse(r.url).query)
         login_portlet(r.url, url_params, r.text)
+
+    with open('session.ser', 'wb') as f:
+        pickle.dump(session, f)
 
 def get_liferay_file(base_url, target_file=None, params=None, method='get'):
     r = make_liferay_request(base_url, params, method, True)
@@ -84,9 +92,9 @@ def make_liferay_request(base_url, params, method, stream=False):
             else:
                 full_url = '%s&%s' % (base_url, query_string)
 
-        r = session.get(full_url, data=params, stream=stream)
+        r = session.get(full_url, data=params, stream=stream, verify=False)
     else:
-        r = session.post(base_url, data=params)
+        r = session.post(base_url, data=params, verify=False)
 
     return r
 
@@ -193,27 +201,63 @@ def login_okta(response_text):
     if 'next' in response_json['_links']:
         redirect_url = response_json['_links']['next']['href']
     elif response_json['status'] == 'MFA_REQUIRED':
-        for factor in response_json['_embedded']['factors']:
-            if factor['factorType'] != 'push':
-                continue
+        factors = {
+            factor['factorType']: factor
+                for factor in response_json['_embedded']['factors']
+        }
 
-            links = factor['_links']
-            verify_url = links['verify']['href']
+        if 'push' in factors:
+            factor_type = 'push'
+        else:
+            factor_types = list(factors.keys())
+            sys.stderr.write('\navailable factors:\n%s' % '\n'.join('  %s: %s' % (i, key) for i, key in enumerate(factor_types)))
+            sys.stderr.write('\nchoose a factor: ')
 
-            while True:
+            factor_type = input()
+
+            try:
+                factor_type = factor_types[int(factor_type)]
+            except:
+                pass
+
+        factor = factors[factor_type]
+
+        links = factor['_links']
+        verify_url = links['verify']['href']
+
+        while True:
+            try:
                 r = session.post(verify_url, json=form_params, headers=headers)
                 response_json = r.json()
 
                 if response_json['status'] == 'SUCCESS':
                     break
 
-                print('Waiting for MFA challenge result...')
-                time.sleep(1)
+                if factor_type != 'push' and response_json['status'] == 'MFA_CHALLENGE':
+                    while response_json['status'] != 'SUCCESS':
+                        sys.stderr.write('passcode: ')
+                        form_params['passCode'] = input()
 
-            print(response_json)
-            redirect_url = response_json['_links']['next']['href']
+                        r = session.post(verify_url, json=form_params, headers=headers)
+                        response_json = r.json()
 
-    r = session.get(redirect_url, headers=headers)
+                        del form_params['passCode']
+
+                    break
+            except:
+                pass
+
+            sys.stderr.write('waiting for MFA result...\n')
+            time.sleep(5)
+
+        redirect_url = response_json['_links']['next']['href']
+
+        if redirect_url is None:
+            sys.stderr.write('unrecognized factors: %s\n' % json.dumps(response_json['_embedded']['factors']))
+    else:
+        sys.stderr.write('unrecognized status: %s\n' % response_json['status'])
+
+    r = session.get(redirect_url, headers=headers, verify=False)
 
     # Process the SAML response
 
@@ -287,4 +331,11 @@ def get_json_auth_token(base_url):
     return json_auth_token[base_url]
 
 if __name__ == '__main__':
+    sys.stderr.write('username: ')
+    username = input()
+    password = getpass('password: ')
+
     print(get_liferay_file(sys.argv[1]))
+else:
+    username = git.config('files.username')
+    password = git.config('files.password')
