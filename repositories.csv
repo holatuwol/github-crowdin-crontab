@@ -4,7 +4,7 @@ liferay-docs,7.1.x,en,420856,liferay-japan-documentation,liferay-docs/7.1.x,deve
 liferay-docs,7.1.x,en,420856,liferay-japan-documentation,liferay-docs/7.1.x,develop/tutorials/articles-dxp,FALSE
 liferay-docs,7.1.x,en,420856,liferay-japan-documentation,liferay-docs/7.1.x,discover/portal/articles,TRUE
 liferay-docs,7.1.x,en,420856,liferay-japan-documentation,liferay-docs/7.1.x,discover/portal/articles-dxp,TRUE
-liferay-learn,commerce-ja-test,docs/commerce/2.x/en,420856,liferay-japan-documentation,commerce/2.x,,FALSE
+liferay-learn,commerce-ja-test,docs/commerce/latest/en,420856,liferay-japan-documentation,commerce/latest,,FALSE
 liferay-learn,dxp-ja-test,docs/dxp/7.x/en,420856,liferay-japan-documentation,liferay-learn/dxp/7.x,,FALSE
 liferay-learn,dxpc-ja-test,docs/dxp-cloud/latest/en,420856,liferay-japan-documentation,dxp-cloud/latest,,FALSE
 liferay-learn,ac-ja-test,docs/analytics-cloud/latest/en,420856,liferay-japan-documentation,analytics-cloud/latest,,FALSE
