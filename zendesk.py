@@ -16,6 +16,22 @@ def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
         parameters[name] = default_value
 
+def get_translation_path(file, source_language, target_language):
+    source_language_path = source_language
+
+    if source_language.find('-') != -1:
+        source_language_path = source_language[:source_language.find('-')]
+
+    target_language_path = target_language
+
+    if target_language.find('-') != -1:
+        target_language_path = target_language[:target_language.find('-')]
+
+    if file[0:3] == '%s/' % source_language_path:
+        return '%s/%s' % (target_language_path, file[3:])
+    else:
+        return file.replace('/%s/' % source_language_path, '/%s/' % target_language_path)
+
 def get_article_id(file):
     return file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
 
@@ -119,15 +135,14 @@ def init_zendesk(domain):
 
     return zendesk_get_request(domain, '/users/me.json', 'user')[0]
 
-def get_article_path(en_article, language, section_paths):
-    section_path = section_paths[str(en_article['section_id'])]
-    date_folder = pd.to_datetime(en_article['created_at']).strftime('%G_w%V')
-    url_name = en_article['html_url'][en_article['html_url'].rfind('/'):]
+def get_article_path(source_article, target_language, section_paths):
+    section_path = section_paths[str(source_article['section_id'])]
+    url_name = source_article['html_url'][source_article['html_url'].rfind('/'):]
 
-    return '%s/%s/%s%s.html' % (language[0:2], section_path, date_folder, url_name)
+    return '%s/%s%s.html' % (target_language[0:2], section_path, url_name)
 
-def get_zendesk_article(domain, article_id, language):
-    api_path = '/help_center/%s/articles/%s.json' % (language, article_id)
+def get_zendesk_article(domain, article_id, target_language):
+    api_path = '/help_center/%s/articles/%s.json' % (target_language, article_id)
     mt_articles = zendesk_get_request(domain, api_path, 'article')
 
     if mt_articles is None:
@@ -137,20 +152,20 @@ def get_zendesk_article(domain, article_id, language):
 
     return article
 
-def update_translated_at(domain, article_id, language, article, articles, section_paths):
-    en_article = get_zendesk_article(domain, article_id, 'en-us')
+def update_translated_at(domain, article_id, source_language, target_language, article, articles, section_paths):
+    source_article = get_zendesk_article(domain, article_id, source_language)
 
-    if en_article is None:
+    if source_article is None:
         return
 
-    mt_article = get_zendesk_article(domain, article_id, language)
+    mt_article = get_zendesk_article(domain, article_id, target_language)
 
     article['translated_at'] = {
-        'en-us': en_article['edited_at']
+        'en-us': source_article['edited_at']
     }
 
     if mt_article is not None:
-        article['translated_at'][language] = mt_article['edited_at']
+        article['translated_at'][target_language] = mt_article['edited_at']
 
 def get_new_articles(domain):
     all_articles = {}
@@ -180,15 +195,15 @@ def get_new_articles(domain):
 
     return all_articles
 
-def get_zendesk_articles(repository, domain, language):
+def get_zendesk_articles(repository, domain, source_language, target_language):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
 
     # Fetch the categories and sections
 
-    categories = get_categories(domain, language)
-    sections = get_sections(domain, language)
+    categories = get_categories(domain, target_language)
+    sections = get_sections(domain, target_language)
 
     section_paths = {
         section_id: '%s%s' % (categories[str(section['category_id'])]['name'], section['html_url'][section['html_url'].rfind('/'):])
@@ -214,11 +229,11 @@ def get_zendesk_articles(repository, domain, language):
 
     for article_id, article in all_articles.items():
         if article_id in articles:
-            if not is_tracked_article(article, section_paths):
+            if not is_tracked_article(article, source_language, section_paths):
                 del articles[article_id]
             elif article['updated_at'] != articles[article_id]['updated_at']:
                 new_tracked_articles[article_id] = article
-        elif is_tracked_article(article, section_paths):
+        elif is_tracked_article(article, source_language, section_paths):
             new_tracked_articles[article_id] = article
 
     articles.update(new_tracked_articles)
@@ -229,11 +244,11 @@ def get_zendesk_articles(repository, domain, language):
     os.chdir(repository.github.git_root)
 
     for article_id, article in sorted(articles.items()):
-        if 'translated_at' not in article or language not in article['translated_at']:
-            update_translated_at(domain, article_id, language, article, articles, section_paths)
+        if 'translated_at' not in article or target_language not in article['translated_at']:
+            update_translated_at(domain, article_id, source_language, target_language, article, articles, section_paths)
 
     for article_id, article in sorted(new_tracked_articles.items()):
-        update_translated_at(domain, article_id, language, article, new_tracked_articles, section_paths)
+        update_translated_at(domain, article_id, source_language, target_language, article, new_tracked_articles, section_paths)
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
@@ -244,7 +259,7 @@ def get_zendesk_articles(repository, domain, language):
 
     return articles, new_tracked_articles, categories, sections, section_paths
 
-def sync_articles(repository, domain, language, articles, article_paths, refresh_articles=None, refresh_paths=None):
+def sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles=None, refresh_paths=None):
     if refresh_articles is not None:
         logging.info('Updating translations for %d articles' % len(refresh_paths))
 
@@ -260,12 +275,12 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
 
     for article_id, file in sorted(article_paths.items()):
         article = articles[article_id]
-        target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+        target_file = get_translation_path(file, source_language, target_language)
 
         if not os.path.isfile(target_file):
             continue
 
-        if language in article['label_names'] and 'mt' not in article['label_names']:
+        if target_language in article['label_names'] and 'mt' not in article['label_names']:
             print(target_file, 'not machine translated')
             os.remove(target_file,)
             git.checkout(target_file)
@@ -284,7 +299,7 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
             git.checkout(target_file)
             continue
 
-        new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
+        new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
         if old_content != new_content:
             with open(target_file, 'w') as f:
@@ -302,14 +317,14 @@ def sync_articles(repository, domain, language, articles, article_paths, refresh
 
     return file_info
 
-def copy_crowdin_to_zendesk(repository, domain, language):
-    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, language)
+def copy_crowdin_to_zendesk(repository, domain, source_language, target_language):
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language)
 
     old_dir = os.getcwd()
 
-    article_paths = check_renamed_articles(repository, language, articles, section_paths)
+    article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
-    file_info = sync_articles(repository, domain, language, articles, {})
+    file_info = sync_articles(repository, domain, source_language, target_language, articles, {})
 
     updated_source_files = [
         article_paths[article_id]
@@ -318,13 +333,13 @@ def copy_crowdin_to_zendesk(repository, domain, language):
     ]
 
     updated_target_files = [
-        language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+        get_translation_path(file, source_language, target_language)
             for file in updated_source_files
     ]
 
-    missing_language_article_ids = [article['id'] for article in articles.values() if language not in article['label_names']]
+    missing_target_language_article_ids = [article['id'] for article in articles.values() if target_language not in article['label_names']]
 
-    logging.info('%d updated files, %d missing %s label' % (len(updated_target_files), len(missing_language_article_ids), language))
+    logging.info('%d updated files, %d missing %s label' % (len(updated_target_files), len(missing_target_language_article_ids), target_language))
 
     # Identify the articles which were added to the Git index and send them to Zendesk
 
@@ -332,49 +347,59 @@ def copy_crowdin_to_zendesk(repository, domain, language):
 
     for article_id, file in sorted(article_paths.items()):
         article = articles[article_id]
-        target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+        target_file = get_translation_path(file, source_language, target_language)
 
-        if language in article['label_names'] and target_file not in updated_target_files:
+        if target_language in article['label_names'] and target_file not in updated_target_files:
             continue
 
-        update_zendesk_translation(repository, domain, article, file, language)
+        update_zendesk_translation(repository, domain, article, file, source_language, target_language)
 
     os.chdir(old_dir)
 
-def copy_zendesk_to_crowdin(repository, domain, language):
-    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, language)
+def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
+    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language)
 
-    sync_articles(repository, domain, language, articles, article_paths, refresh_articles, refresh_paths)
+    sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles, refresh_paths)
 
     with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     return refresh_articles
 
-def check_renamed_articles(repository, language, articles, section_paths):
+def check_renamed_articles(repository, source_language, target_language, articles, section_paths):
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
+    source_language_path = source_language
+
+    if source_language.find('-') != -1:
+        source_language_path = source_language[:source_language.find('-')]
+
+    target_language_path = target_language
+
+    if target_language.find('-') != -1:
+        target_language_path = target_language[:target_language.find('-')]
+
     old_article_paths = {
         get_article_id(file): file
-             for file in git.ls_files('en/').split('\n')
+             for file in git.ls_files(source_language_path + '/').split('\n')
     }
 
     new_article_paths = {
-        str(article['id']): get_article_path(article, 'en', section_paths)
+        str(article['id']): get_article_path(article, source_language_path, section_paths)
             for article in articles.values()
-                if is_tracked_article(article, section_paths)
+                if is_tracked_article(article, source_language, section_paths)
     }
 
     old_translated_paths = {
         get_article_id(file): file
-             for file in git.ls_files(language + '/').split('\n')
+             for file in git.ls_files(target_language_path + '/').split('\n')
     }
 
     new_translated_paths = {
-        str(article['id']): get_article_path(article, language, section_paths)
+        str(article['id']): get_article_path(article, target_language_path, section_paths)
             for article in articles.values()
-                if is_tracked_article(article, section_paths)
+                if is_tracked_article(article, source_language, section_paths)
     }
 
     for article_id, new_article_path in sorted(new_article_paths.items()):
@@ -420,7 +445,12 @@ def check_renamed_articles(repository, language, articles, section_paths):
 
     return new_article_paths
 
-def save_article_metadata(domain, repository, language, articles, article_paths, categories, sections):
+def save_article_metadata(domain, repository, target_language, articles, article_paths, categories, sections):
+    target_language_path = target_language
+
+    if target_language.find('-') != -1:
+        target_language_path = target_language[:target_language.find('-')]
+
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
@@ -438,7 +468,7 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
         article = articles[article_id]
         title = article['title']
 
-        target_file = language + '/' + article_path[3:]
+        target_file = target_language_path + '/' + article_path[3:]
 
         if not os.path.isfile(target_file):
             continue
@@ -451,8 +481,8 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
         category = categories[str(section['category_id'])]
 
         article_metadata[article_id] = {
-            'category': category['title_' + language],
-            'section': section['title_' + language],
+            'category': category['title_' + target_language],
+            'section': section['title_' + target_language],
             'title': title,
             'mt': 'mt' in article['label_names']
         }
@@ -465,7 +495,7 @@ def save_article_metadata(domain, repository, language, articles, article_paths,
 
     os.chdir(old_dir)
 
-def get_categories(domain, language):
+def get_categories(domain, target_language):
     categories = {}
 
     if os.path.exists('%s/categories_%s.json' % (initial_dir, domain)):
@@ -477,13 +507,13 @@ def get_categories(domain, language):
     for category in category_list:
         category_id = str(category['id'])
 
-        if category_id in categories and 'title_' + language in categories[category_id]:
+        if category_id in categories and 'title_' + target_language in categories[category_id]:
             continue
 
-        translations = zendesk_get_request(domain, '/help_center/categories/%s/translations/%s.json' % (category_id, language), 'translation')
+        translations = zendesk_get_request(domain, '/help_center/categories/%s/translations/%s.json' % (category_id, target_language), 'translation')
 
         if translations is not None and len(translations) > 0:
-            category['title_' + language] = translations[0]['title']
+            category['title_' + target_language] = translations[0]['title']
 
         categories[category_id] = category
 
@@ -492,7 +522,7 @@ def get_categories(domain, language):
 
     return categories
 
-def get_sections(domain, language):
+def get_sections(domain, target_language):
     sections = {}
 
     if os.path.exists('%s/sections_%s.json' % (initial_dir, domain)):
@@ -504,13 +534,13 @@ def get_sections(domain, language):
     for section in section_list:
         section_id = str(section['id'])
 
-        if section_id in sections and 'title_' + language in sections[section_id]:
+        if section_id in sections and 'title_' + target_language in sections[section_id]:
             continue
 
-        translations = zendesk_get_request(domain, '/help_center/sections/%s/translations/%s.json' % (section_id, language), 'translation')
+        translations = zendesk_get_request(domain, '/help_center/sections/%s/translations/%s.json' % (section_id, target_language), 'translation')
 
         if translations is not None and len(translations) > 0:
-            section['title_' + language] = translations[0]['title']
+            section['title_' + target_language] = translations[0]['title']
 
         sections[section_id] = section
 
@@ -519,7 +549,7 @@ def get_sections(domain, language):
 
     return sections
 
-def download_zendesk_articles(repository, domain, language):
+def download_zendesk_articles(repository, domain, source_language, target_language):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -527,8 +557,8 @@ def download_zendesk_articles(repository, domain, language):
     # Download current article information and rearrange articles that may have
     # moved categories.
 
-    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, language)
-    article_paths = check_renamed_articles(repository, language, articles, section_paths)
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language)
+    article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
     for article_id, article_path in sorted(article_paths.items()):
         if article_id not in articles:
@@ -537,7 +567,7 @@ def download_zendesk_articles(repository, domain, language):
 
     # Save articles and translations that currently exist on zendesk
 
-    save_article_metadata(domain, repository, language, articles, article_paths, categories, sections)
+    save_article_metadata(domain, repository, target_language, articles, article_paths, categories, sections)
 
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
@@ -547,13 +577,13 @@ def download_zendesk_articles(repository, domain, language):
     candidate_article_ids = [
         article_id
             for article_id, article in sorted(articles.items())
-                if requires_update(repository, domain, article, language, article_paths[article_id])
+                if requires_update(repository, domain, article, source_language, target_language, article_paths[article_id])
     ]
 
     # Second pass: anything that looks outdated, make sure its translation metadata is up-to-date
 
     for article_id in candidate_article_ids:
-        update_translated_at(domain, article_id, language, articles[article_id], articles, section_paths)
+        update_translated_at(domain, article_id, source_language, target_language, articles[article_id], articles, section_paths)
 
     with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
@@ -563,7 +593,7 @@ def download_zendesk_articles(repository, domain, language):
     refresh_articles = {
         article_id: articles[article_id]
             for article_id in candidate_article_ids
-                if requires_update(repository, domain, articles[article_id], language, article_paths[article_id])
+                if requires_update(repository, domain, articles[article_id], source_language, target_language, article_paths[article_id])
     }
 
     # Cache the articles on disk so we can work on them without having to go back to the API
@@ -603,14 +633,19 @@ tracked_labels = []
 with open('%s/zendesk_tracked_labels.txt' % initial_dir, 'r') as f:
     tracked_labels = [line.strip() for line in f.readlines()]
 
-def is_tracked_article(article, section_paths):
+def is_tracked_article(article, source_language, section_paths):
     if article['draft']:
         return False
 
-    if article['locale'] != 'en-us':
+    if article['locale'] != source_language:
         return False
 
-    section_path = section_paths[str(article['section_id'])]
+    section_id = str(article['section_id'])
+
+    if section_id not in section_paths:
+        return False
+
+    section_path = section_paths[section_id]
     category_name = section_path[0:section_path.find('/')]
     label_names = article['label_names']
 
@@ -640,11 +675,11 @@ def remove_nbsp(content):
 
     return new_content
 
-def requires_update(repository, domain, article, language, file):
+def requires_update(repository, domain, article, source_language, target_language, file):
     # check if machine translation is needed
 
-    if language not in article['label_names']:
-        logging.info('%s (missing %s label)' % (article['id'], language))
+    if target_language not in article['label_names']:
+        logging.info('%s (missing %s label)' % (article['id'], target_language))
         return True
 
     if 'mt' not in article['label_names']:
@@ -658,23 +693,23 @@ def requires_update(repository, domain, article, language, file):
 
     # check if we have a date for the last translation
 
-    if language not in article['translated_at']:
-        logging.info('%s (missing %s label)' % (article['id'], language))
+    if target_language not in article['translated_at']:
+        logging.info('%s (missing %s label)' % (article['id'], target_language))
         return True
 
-    if article['translated_at']['en-us'][0:10] <= article['translated_at'][language][0:10]:
+    if article['translated_at'][source_language][0:10] <= article['translated_at'][target_language][0:10]:
         return False
 
     # check if a translation is missing
 
-    target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+    target_file = get_translation_path(file, source_language, target_language)
     target_path = '%s/%s' % (repository.github.git_root, target_file)
 
     if not os.path.exists(target_path):
         logging.info('%s (no translation %s)' % (article['id'], target_path))
         return True
 
-    # check if the source language was changed
+    # check if the source target_language was changed
 
     with open(file, 'r') as f:
         old_content = ''.join(f.readlines()).strip()
@@ -682,24 +717,24 @@ def requires_update(repository, domain, article, language, file):
     new_content = '<h1>%s</h1>\n%s' % (article['title'], article['body'])
 
     if old_content != new_content:
-        logging.info('%s (%s > %s)' % (article['id'], article['translated_at']['en-us'][0:10], article['translated_at'][language][0:10]))
+        logging.info('%s (%s > %s)' % (article['id'], article['translated_at'][source_language][0:10], article['translated_at'][target_language][0:10]))
         return True
 
     # check if it's missing a disclaimer
 
     missing_disclaimer = True
-    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
+    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
     if old_content == new_content:
         missing_disclaimer = False
     else:
-        mt_article = get_zendesk_article(domain, article['id'], language)
+        mt_article = get_zendesk_article(domain, article['id'], target_language)
 
         if mt_article is None:
             logging.info('%s (deleted article)' % article['id'])
             return False
 
-        missing_disclaimer = mt_article['body'].find(disclaimer_zendesk.strip()) == -1
+        missing_disclaimer = mt_article['body'].find(disclaimer_zendesk[target_language].strip()) == -1
 
     if missing_disclaimer:
         logging.info('%s (missing MT disclaimer)' % article['id'])
@@ -708,14 +743,14 @@ def requires_update(repository, domain, article, language, file):
     logging.info('%s (outdated, but text matches)' % article['id'])
     return False
 
-def update_zendesk_translation(repository, domain, article, file, language):
-    target_file = language + '/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/%s/' % language)
+def update_zendesk_translation(repository, domain, article, file, source_language, target_language):
+    target_file = get_translation_path(file, source_language, target_language)
 
     if not os.path.exists(target_file):
         print('%s (skipping translation not available on file system)' % article['id'])
         return False
 
-    if language in article['label_names'] and 'mt' not in article['label_names']:
+    if target_language in article['label_names'] and 'mt' not in article['label_names']:
         print('%s (skipping translation, not supposed to be updated since it was manually translated)' % article['id'])
         return False
 
@@ -723,8 +758,8 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
     update_labels = False
 
-    if language not in article['label_names']:
-        article['label_names'].append(language)
+    if target_language not in article['label_names']:
+        article['label_names'].append(target_language)
         update_labels = True
 
         if 'mt' not in article['label_names']:
@@ -748,7 +783,7 @@ def update_zendesk_translation(repository, domain, article, file, language):
 
     # Check if the translation needs an update
 
-    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, language)
+    new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
     logging.info('%s (updating translation)' % article['id'])
 
@@ -762,10 +797,10 @@ def update_zendesk_translation(repository, domain, article, file, language):
         print('Error fetching missing locales for article %s' % article['id'])
         return False
 
-    if missing_locales is None or language in missing_locales:
+    if missing_locales is None or target_language in missing_locales:
         json_params = {
             'translation': {
-                'locale': language,
+                'locale': target_language,
                 'title': new_title,
                 'body': new_content
             }
@@ -786,7 +821,7 @@ def update_zendesk_translation(repository, domain, article, file, language):
             }
         }
 
-        api_path = '/help_center/articles/%s/translations/%s.json' % (article['id'], language)
+        api_path = '/help_center/articles/%s/translations/%s.json' % (article['id'], target_language)
 
         try:
             zendesk_json_request(domain, api_path, 'translation', 'PUT', json_params)
