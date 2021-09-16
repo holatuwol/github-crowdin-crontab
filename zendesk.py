@@ -2,7 +2,7 @@ from collections import defaultdict
 from crowdin_sync import update_repository
 from datetime import datetime
 from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
-from file_manager import get_eligible_files, get_crowdin_file
+from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
 import git
 import json
 import logging
@@ -15,22 +15,6 @@ from scrape_liferay import authenticate, session
 def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
         parameters[name] = default_value
-
-def get_translation_path(file, source_language, target_language):
-    source_language_path = source_language
-
-    if source_language.find('-') != -1:
-        source_language_path = source_language[:source_language.find('-')]
-
-    target_language_path = target_language
-
-    if target_language.find('-') != -1:
-        target_language_path = target_language[:target_language.find('-')]
-
-    if file[0:3] == '%s/' % source_language_path:
-        return '%s/%s' % (target_language_path, file[3:])
-    else:
-        return file.replace('/%s/' % source_language_path, '/%s/' % target_language_path)
 
 def get_article_id(file):
     return file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
@@ -263,11 +247,11 @@ def sync_articles(repository, domain, source_language, target_language, articles
     if refresh_articles is not None:
         logging.info('Updating translations for %d articles' % len(refresh_paths))
 
-        new_files, all_files, file_info = update_repository(repository, list(refresh_paths.values()), sync_sources=True)
+        new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(refresh_paths.values()), sync_sources=True)
     else:
         logging.info('Downloading latest translations for %d articles' % len(article_paths))
 
-        new_files, all_files, file_info = update_repository(repository, list(article_paths.values()), sync_sources=False)
+        new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(article_paths.values()), sync_sources=False)
 
     old_dir = os.getcwd()
 
@@ -282,7 +266,7 @@ def sync_articles(repository, domain, source_language, target_language, articles
 
         if target_language in article['label_names'] and 'mt' not in article['label_names']:
             print(target_file, 'not machine translated')
-            os.remove(target_file,)
+            os.remove(target_file)
             git.checkout(target_file)
             continue
 

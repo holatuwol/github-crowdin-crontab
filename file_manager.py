@@ -52,6 +52,22 @@ def get_files(folder):
 
     return list(files)
 
+def get_translation_path(file, source_language, target_language):
+    source_language_path = source_language
+
+    if source_language.find('-') != -1:
+        source_language_path = source_language[:source_language.find('-')]
+
+    target_language_path = target_language
+
+    if target_language.find('-') != -1:
+        target_language_path = target_language[:target_language.find('-')]
+
+    if file[0:3] == '%s/' % source_language_path:
+        return '%s/%s' % (target_language_path, file[3:])
+    else:
+        return file.replace('/%s/' % source_language_path, '/%s/' % target_language_path)
+
 def is_translation_eligible(repository, file, language_id):
     if repository.github.single_folder is None:
         prefix = repository.github.project_folder + '/'

@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 from datetime import datetime, timedelta
 import git
-from file_manager import get_local_file, get_crowdin_file, get_root_folders
+from file_manager import get_crowdin_file, get_local_file, get_root_folders, get_translation_path
 import json
 import logging
 import math
@@ -96,24 +96,41 @@ def _pandoc(source_file, target_file, *args):
 
 # Generate a "crowdin.yaml" file to tell the CLI what to do.
 
-def get_crowdin_config_entry(repository, file):
-    assert(not os.path.isdir(file))
+def get_crowdin_config_entry(repository, source_language, target_language, source_file):
+    assert(not os.path.isdir(source_file))
 
-    if file[0:3] == 'en/':
-        translation = '%two_letters_code%/' + file[3:]
+    if source_language.find('-') != -1:
+        source_language = source_language[:source_language.find('-')]
+
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
+
+    source_language_path = source_language + '/'
+
+    if source_file[0:3] == source_language_path:
+        target_language_path = target_language + '/'
+
+        target_file = target_language_path + source_file[3:]
+        translation = '%two_letters_code%/' + source_file[3:]
     else:
-        translation = file.replace('/en/', '/%two_letters_code%/')
+        source_language_path = '/' + source_language + '/'
+        target_language_path = '/' + target_language + '/'
 
-    dest = '/' + get_crowdin_file(repository, file)
+        target_file = source_file.replace(source_language_path, target_language_path)
+        translation = source_file.replace(source_language_path, '/%two_letters_code%/')
+
+    dest = '/' + get_crowdin_file(repository, source_file)
+
+    os.makedirs(os.path.dirname(target_file), exist_ok=True)
 
     return {
-        'source': file,
+        'source': source_file,
         'dest': dest,
         'translation': translation
     }
 
-def configure_crowdin(repository, files):
-    configs = [get_crowdin_config_entry(repository, file) for file in sorted(set(files))]
+def configure_crowdin(repository, source_language, target_language, files):
+    configs = [get_crowdin_config_entry(repository, source_language, target_language, file) for file in sorted(set(files))]
     config_json = json.dumps(configs, indent=2)
 
     with open('%s/crowdin.yaml' % repository.github.git_root, 'w') as f:
@@ -145,8 +162,8 @@ def fix_product_name_tokens(file):
 
 # Wrapper functions to upload sources and download translations.
 
-def crowdin_upload_sources(repository, new_files):
-    before_upload = get_crowdin_file_info(repository)
+def crowdin_upload_sources(repository, source_language, target_language, new_files):
+    before_upload = get_crowdin_file_info(repository, target_language)
 
     for file in new_files:
         git.checkout(file)
@@ -163,7 +180,7 @@ def crowdin_upload_sources(repository, new_files):
     upload_files = [file for file in new_files if file not in ignore_files]
 
     if len(upload_files) > 0:
-        configure_crowdin(repository, upload_files)
+        configure_crowdin(repository, source_language, target_language, upload_files)
 
         _crowdin('upload', 'sources')
 
@@ -171,13 +188,16 @@ def crowdin_upload_sources(repository, new_files):
         git.checkout(file)
 
     if len(upload_files) > 0:
-        after_upload = get_crowdin_file_info(repository)
+        after_upload = get_crowdin_file_info(repository, target_language)
     else:
         after_upload = before_upload
     
     return before_upload, after_upload
 
-def crowdin_download_translations(repository, refresh_files, file_info):
+def crowdin_download_translations(repository, source_language, target_language, refresh_files, file_info):
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
+
     updated_files = list(refresh_files)
 
     for file in refresh_files:
@@ -189,16 +209,16 @@ def crowdin_download_translations(repository, refresh_files, file_info):
         metadata = file_info[crowdin_file]
         updated_files.append(file)
 
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+        target_file = get_translation_path(file, source_language, target_language)
 
         if not os.path.isfile(target_file):
             updated_files.append(file)
             continue
 
     if len(updated_files) > 0:
-        configure_crowdin(repository, updated_files)
+        configure_crowdin(repository, source_language, target_language, updated_files)
 
-        _crowdin('download', '-l', 'ja')
+        #_crowdin('download', '-l', target_language)
 
 crowdin_base_url = 'https://api.crowdin.com/api'
 
@@ -240,12 +260,12 @@ def crowdin_request(repository, api_path, request_type='GET', data=None, files=N
 
     return (r.status_code, r.content)
 
-def save_translation_memory(repository):
+def save_translation_memory(repository, source_language, target_language):
     logging.info('crowdin-api download-tm')
 
     data = {
-        'source_language': 'en',
-        'target_language': 'ja'
+        'source_language': source_language,
+        'target_language': target_language
     }
 
     status_code, response_content = crowdin_request(repository, '/download-tm', 'GET', data)
@@ -306,11 +326,12 @@ def extract_crowdin_file_info(repository, files_element, current_path, file_info
         if item_node_type != 'file':
             extract_crowdin_file_info(repository, item.find('files'), item_path, file_info)
 
-def get_crowdin_file_info(repository):
-    logging.info('crowdin-api language-status')
+def get_crowdin_file_info(repository, target_language):
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
 
     data = {
-        'language': 'ja'
+        'language': target_language
     }
 
     status_code, response_content = crowdin_request(
@@ -523,7 +544,7 @@ def delete_auto_translations(repository, file_info):
             None,
             lambda x: x['user']['login'] == 'is-user')
 
-def delete_code_translations(repository, file_name, file_info):
+def delete_code_translations(repository, source_language, target_language, file_name, file_info):
     crowdin_file_name = get_crowdin_file(repository, file_name)
     
     if crowdin_file_name not in file_info:
@@ -571,7 +592,7 @@ def delete_code_translations(repository, file_name, file_info):
     if not has_suggestions:
         return False
 
-    target_file = 'ja/' + file_name[3:] if file_name[0:3] == 'en/' else file_name.replace('/en/', '/ja/')
+    target_file = get_translation_path(file, source_language, target_language)
 
     if os.path.exists(target_file):
         os.remove(target_file)
@@ -589,14 +610,14 @@ def get_file_ids(repository, files, file_info):
                 if crowdin_file in file_info
     }
 
-def pre_translate(repository, code_check_needed, translation_needed, file_info):
+def pre_translate(repository, source_language, target_language, code_check_needed, translation_needed, file_info):
     code_check_needed_file_ids = get_file_ids(repository, code_check_needed, file_info)
 
     for file, crowdin_file in sorted(code_check_needed_file_ids.items()):
         file_metadata = file_info[get_crowdin_file(repository, file)]
 
         if file_metadata['phrases'] != file_metadata['translated']:
-            delete_code_translations(repository, file, file_info)
+            delete_code_translations(repository, source_language, target_language, file, file_info)
 
     translation_needed_file_ids = get_file_ids(repository, translation_needed, file_info)
 
@@ -616,9 +637,9 @@ def pre_translate(repository, code_check_needed, translation_needed, file_info):
         translate_with_machine(repository, 'deepl-translator', missing_phrases_files)
         translate_with_machine(repository, 'google-translate', missing_phrases_files)
 
-    file_info = get_crowdin_file_info(repository)
+    file_info = get_crowdin_file_info(repository, target_language)
     
-    return get_crowdin_file_info(repository)
+    return get_crowdin_file_info(repository, target_language)
 
 def get_orphaned_files(repository, update_result):
     new_files, all_files, file_info = update_result

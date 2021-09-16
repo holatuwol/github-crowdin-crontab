@@ -1,6 +1,6 @@
 from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, fix_product_name_tokens, get_crowdin_file_info, pre_translate, save_glossary, save_translation_memory
 from datetime import datetime
-from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders
+from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders, get_translation_path
 import git
 from github import get_milestone_map, get_milestone_numbers, init_issues, update_translation_issues
 import logging
@@ -16,7 +16,7 @@ logging.basicConfig(
 # Perform any needed GitHub issue maintenance to keep project boards usable,
 # perform any needed CrowdIn file maintenance to stay under the quota.
 
-def cleanup_files(repository, all_files, old_file_info, new_file_info):
+def cleanup_files(repository, source_language, target_language, all_files, old_file_info, new_file_info):
     human_milestone_number = get_milestone_map(repository)['human']
     milestone_numbers = get_milestone_numbers(repository, all_files, new_file_info)
 
@@ -50,29 +50,29 @@ def cleanup_files(repository, all_files, old_file_info, new_file_info):
         elif key in new_keys:
             to_upload.add(local_file)
 
-    return update_sources(repository, to_upload)
+    return update_sources(repository, source_language, target_language, to_upload)
 
-def update_sources(repository, new_files, all_files):
-    old_file_info, file_info = crowdin_upload_sources(repository, new_files)
+def update_sources(repository, source_language, target_language, new_files, all_files):
+    old_file_info, file_info = crowdin_upload_sources(repository, source_language, target_language, new_files)
 
     update_files = set(new_files)
 
     if repository.crowdin.delete_enabled:
-        file_info = pre_translate(repository, update_files, all_files, file_info)
+        file_info = pre_translate(repository, source_language, target_language, update_files, all_files, file_info)
     else:
         for file in update_files:
-            delete_code_translations(repository, file, file_info)
+            delete_code_translations(repository, source_language, target_language, file, file_info)
 
-        file_info = get_crowdin_file_info(repository)
+        file_info = get_crowdin_file_info(repository, target_language)
 
-    crowdin_download_translations(repository, all_files, file_info)
+    crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
 
     return old_file_info, file_info
 
 # Retrieve the list of all files we should translate and all updated files that
 # we need to re-translate.
 
-def get_branch_files(repository, check_upstream=False):
+def get_branch_files(repository, source_language, check_upstream=False):
     if check_upstream and repository.github.upstream is not None:
         git.fetch(
             'upstream', '--no-tags', '%s:refs/remotes/upstream/%s' % \
@@ -89,16 +89,16 @@ def get_branch_files(repository, check_upstream=False):
             line[3:] for line in git.status('status', '-s', strip=False) if len(line) > 3
         ])
 
-    new_files = get_eligible_files(repository, diff_output, 'en')
+    new_files = get_eligible_files(repository, diff_output, source_language)
 
     lstree_output = git.ls_tree('-r', '--name-only', repository.github.branch, strip=False)
-    all_files = get_eligible_files(repository, lstree_output, 'en')
+    all_files = get_eligible_files(repository, lstree_output, source_language)
 
     return new_files, all_files
 
 # Update local copies of translations, translation memory, and glossaries.
 
-def get_repository_state(repository, refresh_paths=None, check_upstream=False):
+def get_repository_state(repository, source_language, target_language, refresh_paths=None, check_upstream=False):
     global git_root
     git_root = repository.github.git_root
     
@@ -106,16 +106,16 @@ def get_repository_state(repository, refresh_paths=None, check_upstream=False):
     os.chdir(git_root)
 
     if refresh_paths is None:
-        new_files, all_files = get_branch_files(repository, check_upstream)
+        new_files, all_files = get_branch_files(repository, source_language, check_upstream)
     else:
         new_files = refresh_paths
-        _, all_files = get_branch_files(repository, check_upstream)
+        _, all_files = get_branch_files(repository, source_language, check_upstream)
 
-    file_info = get_crowdin_file_info(repository)
+    file_info = get_crowdin_file_info(repository, target_language)
 
     return new_files, all_files, file_info
 
-def check_file_lists(repository, new_files, all_files):
+def check_file_lists(repository, source_language, target_language, new_files, all_files):
     for file in all_files:
         if not os.path.exists(file):
             continue
@@ -126,7 +126,7 @@ def check_file_lists(repository, new_files, all_files):
         if re.search('@[^@ ]*-[^@ ]*@', file_content) is None:
             continue
 
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+        target_file = get_translation_path(file, source_language, target_language)
 
         if not os.path.exists(target_file):
             continue
@@ -136,33 +136,23 @@ def check_file_lists(repository, new_files, all_files):
 
         if file_content.find('@<') == -1 and file_content.find('>@') == -1:
             continue
-
-        os.remove(target_file)
         
         if file not in new_files:
             new_files.append(file)
 
-    for file in new_files:
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
-
-        if os.path.isfile(target_file):
-            os.remove(target_file)
-
     for file in set(all_files) - set(new_files):
-        target_file = 'ja/' + file[3:] if file[0:3] == 'en/' else file.replace('/en/', '/ja/')
+        target_file = get_translation_path(file, source_language, target_language)
 
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository, refresh_paths=None, check_upstream=False, create_issues=False, sync_sources=True):
+def update_repository(repository, source_language, target_language, refresh_paths=None, check_upstream=False, create_issues=False, sync_sources=True):
     step_number = 1
 
     logging.info('step %d: get repository state for translation download' % step_number)
     step_number = step_number + 1
 
-    new_files, all_files, file_info = get_repository_state(repository, refresh_paths, check_upstream)
-
-    empty_files = []
+    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language, refresh_paths, check_upstream)
 
     if not sync_sources:
         all_files = []
@@ -175,11 +165,6 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
                 if not os.path.isdir(local_folder):
                     os.makedirs(local_folder)
 
-                if not os.path.isfile(local_file):
-                    empty_files.append(local_file)
-                    with open(local_file, 'w') as temp_file:
-                        pass
-
                 all_files.append(local_file)
 
         new_files = all_files
@@ -187,16 +172,16 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
     logging.info('step %d: check for existing translations of %d files' % (step_number, len(all_files)))
     step_number = step_number + 1
 
-    check_file_lists(repository, new_files, all_files)
+    check_file_lists(repository, source_language, target_language, new_files, all_files)
 
     if sync_sources:
         logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
 
-        old_file_info, file_info = update_sources(repository, new_files, all_files)
+        old_file_info, file_info = update_sources(repository, source_language, target_language, new_files, all_files)
     else:
         logging.info('step %d: check for translations of %d source files' % (step_number, len(new_files)))
 
-        crowdin_download_translations(repository, all_files, file_info)
+        crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
 
         old_file_info = file_info
 
@@ -214,15 +199,6 @@ def update_repository(repository, refresh_paths=None, check_upstream=False, crea
         step_number = step_number + 1
 
         update_translation_issues(repository, file_info)
-
-    logging.info('step %d: download translation memory and glossary' % step_number)
-    step_number = step_number + 1
-
-    save_translation_memory(repository)
-    save_glossary(repository)
-
-    for file in empty_files:
-        os.remove(file)
 
     logging.info('cd -')
     os.chdir(initial_dir)
