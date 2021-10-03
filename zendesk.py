@@ -121,7 +121,7 @@ def init_zendesk(domain):
 
 def get_article_path(source_article, target_language, section_paths):
     section_path = section_paths[str(source_article['section_id'])]
-    url_name = source_article['html_url'][source_article['html_url'].rfind('/'):]
+    url_name = source_article['html_url'][source_article['html_url'].rfind('/'):][:250]
 
     return '%s/%s%s.html' % (target_language[0:2], section_path, url_name)
 
