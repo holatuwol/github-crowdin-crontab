@@ -1,2 +1,7 @@
 .ipynb_checkpoints
 __pycache__
+session.ser
+*.tar.gz
+*.json
+*.tbx
+*.tmx
