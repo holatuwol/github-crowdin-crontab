@@ -1,5 +1,5 @@
-from bs4 import BeautifulSoup
 from collections import defaultdict
+from crowdin_util import crowdin_http_request, crowdin_request, get_crowdin_file_info
 from datetime import datetime, timedelta
 import git
 from file_manager import get_crowdin_file, get_local_file, get_root_folders, get_translation_path
@@ -9,13 +9,9 @@ import math
 import os
 import numpy as np
 import pandas as pd
-import random
 from repository import initial_dir
-import requests
-from scrape_liferay import authenticate, session
 import subprocess
 import time
-import urllib
 
 next_export = None
 
@@ -220,46 +216,6 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
         #_crowdin('download', '-l', target_language)
 
-crowdin_base_url = 'https://api.crowdin.com/api'
-
-def crowdin_request(repository, api_path, request_type='GET', data=None, files=None):
-    headers = {
-        'user-agent': 'python'
-    }
-
-    if repository is None:
-        request_url = crowdin_base_url + api_path
-    else:
-        request_url = crowdin_base_url + '/project/' + repository.crowdin.project_name + api_path
-
-    if repository is None:
-        get_data = {
-            'login': git.config('crowdin.account-login'),
-            'account-key': git.config('crowdin.account-key-v1')
-        }
-    else:
-        get_data = {
-            'key': repository.crowdin.api_key
-        }
-    
-    if request_type == 'GET':
-        if data is not None:
-            get_data.update(data)
-            
-        request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
-
-        r = requests.get(request_url, data=get_data, headers=headers)
-    else:
-        request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
-
-        r = requests.post(request_url, data=data, files=files, headers=headers)
-
-    if r.status_code < 200 or r.status_code >= 400:
-        logging.error('HTTP Error: %d' % r.status_code)
-        return (r.status_code, None)
-
-    return (r.status_code, r.content)
-
 def save_translation_memory(repository, source_language, target_language):
     logging.info('crowdin-api download-tm')
 
@@ -303,47 +259,6 @@ def delete_translation_folder(repository):
 
     return crowdin_request(repository, '/delete-directory', 'POST', data)
 
-def extract_crowdin_file_info(repository, files_element, current_path, file_info):
-    for item in files_element.children:
-        if item.name != 'item':
-            continue
-
-        item_name = item.find('name').text
-        item_node_type = item.find('node_type').text
-
-        item_path = current_path + '/' + item_name if current_path is not None else item_name
-
-        if item_path.find(repository.crowdin.dest_folder) == 0:
-            file_info[item_path] = {
-                'phrases': int(item.find('phrases').text),
-                'translated': int(item.find('translated').text),
-                'approved': int(item.find('approved').text)
-            }
-
-            if item_node_type == 'file':
-                file_info[item_path]['id'] = item.find('id').text
-
-        if item_node_type != 'file':
-            extract_crowdin_file_info(repository, item.find('files'), item_path, file_info)
-
-def get_crowdin_file_info(repository, target_language):
-    if target_language.find('-') != -1:
-        target_language = target_language[:target_language.find('-')]
-
-    data = {
-        'language': target_language
-    }
-
-    status_code, response_content = crowdin_request(
-        repository, '/language-status', 'POST', data)
-
-    file_info = {}
-
-    if response_content is not None:
-        soup = BeautifulSoup(response_content, features='html.parser')
-        extract_crowdin_file_info(repository, soup.find('files'), None, file_info)
-
-    return file_info
 
 # Send requests to CrowdIn to do automated machine translation.
 
@@ -402,202 +317,7 @@ def translate_with_machine(repository, engine, file_ids):
         if response_data['success']:
             wait_for_translation(repository)
 
-csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
 
-def crowdin_http_request(repository, path, method, **data):
-    global csrf_token
-
-    if method == 'GET':
-        get_data = { key: value for key, value in data.items() }
-
-        get_data['project_id'] = repository.crowdin.project_id
-        get_data['target_language_id'] = '25'
-
-        query_string = '&'.join([urllib.parse.quote(key) + '=' + urllib.parse.quote(str(value)) for key, value in get_data.items()])
-        
-        url = 'https://crowdin.com%s?%s' % (path, query_string)
-    else:
-        url = 'https://crowdin.com%s' % path
-
-    session.cookies.set('csrf_token', csrf_token, domain='.crowdin.com', path='/')
-
-    try:
-        if method == 'GET':
-            r = session.get(url, headers={'x-csrf-token': csrf_token})
-        elif method == 'POST':
-            r = session.post(url, data=data, headers={'x-csrf-token': csrf_token})
-
-        if r.url.find('/login') == -1:
-            return r.content
-    except:
-        pass
-    
-    logging.info('Session timed out, refreshing session')
-
-    continue_url = 'https://crowdin.com/%s/settings' % repository.crowdin.project_name
-    login_url = 'https://accounts.crowdin.com/login'
-
-    r = session.get(login_url)
-    
-    soup = BeautifulSoup(r.text, features='html.parser')
-    token_input = soup.find('input', attrs={'name': '_token'})
-    
-    if token_input is None:
-        return crowdin_http_request(repository, path, method, **data)
-    
-    login_data = {
-        'email_or_login': git.config('crowdin.login'),
-        'password': git.config('crowdin.password'),
-        'hash': 'files',
-        'continue': url,
-        'locale': 'en',
-        'intended': '/auth/token',
-        '_token': token_input.attrs['value']
-    }
-
-    r = session.post(login_url, data=login_data)
-
-    if r.text.find('/remember-me/decline') != -1:
-        soup = BeautifulSoup(r.text, features='html.parser')
-        token_input = soup.find('input', attrs={'name': '_token'})
-
-        login_data = {
-            '_token': token_input.attrs['value']
-        }
-
-        r = session.post('https://accounts.crowdin.com/remember-me/decline', data=login_data)
-
-    return crowdin_http_request(repository, path, method, **data)
-
-# Mass delete suggestions
-
-def process_suggestions(repository, crowdin_file_name, file_info, translation_filter, translation_post_process, suggestion_filter):
-    file_id = file_info[crowdin_file_name]['id']
-
-    response_content = crowdin_http_request(
-        repository, '/backend/phrases/phrases_as_html', 'GET',
-        file_id=file_id)
-
-    soup = BeautifulSoup(response_content, features='html.parser')   
-
-    translations = [
-        tag for tag in soup.find_all(attrs={'class': 'crowdin_phrase'})
-    ]
-
-    translation_ids = [
-        tag.attrs['id'][len('crowdin_phrase_'):] for tag in translations
-            if translation_filter(tag)
-    ]
-
-    has_suggestions = False
-
-    for translation_id in translation_ids:
-        response_content = crowdin_http_request(
-            repository, '/backend/translation/phrase', 'GET',
-            translation_id=translation_id)
-        response_data = None
-
-        try:
-            response_data = json.loads(response_content.decode('utf-8'))['data']
-            raw_suggestions = response_data['suggestions']
-        except:
-            logging.error('Error trying to parse phrase %s for file %s' % (translation_id, crowdin_file_name))
-            raw_suggestions = []
-
-        if type(raw_suggestions) is dict:
-            suggestions = [
-                suggestion for key, sublist in raw_suggestions.items() for suggestion in sublist
-                    if suggestion_filter(suggestion)
-            ]
-        elif type(raw_suggestions) is list:
-            suggestions = [
-                suggestion for suggestion in raw_suggestions
-                    if suggestion_filter(suggestion)
-            ]
-        else:
-            logging.info('Unable to find translation %s for file %s' % (translation_id, file_name))
-            suggestions = []
-
-        if len(suggestions) > 0:
-            has_suggestions = True
-
-            for suggestion in suggestions:
-                logging.info('Deleting suggestion %s from user %s' % (suggestion['id'], suggestion['user']['login']))
-                crowdin_http_request(
-                    repository, '/backend/suggestions/delete', 'GET',
-                    translation_id=translation_id, plural_id='-1', suggestion_id=suggestion['id'])
-
-        if translation_post_process is not None and response_data is not None:
-            translation_post_process(translation_id, response_data)
-
-    return has_suggestions
-
-# Clear out auto-translations so we have a better sense of progress
-
-def delete_auto_translations(repository, file_info):
-    for crowdin_file_name in [key for key, value in file_info.items() if key.find(repository.crowdin.dest_folder) == 0 and 'id' in value]:
-        logging.info('Removing auto-translations for file %s' % crowdin_file_name)
-
-        process_suggestions(
-            repository, crowdin_file_name, file_info,
-            lambda x: True,
-            None,
-            lambda x: x['user']['login'] == 'is-user')
-
-def delete_code_translations(repository, source_language, target_language, file_name, file_info):
-    crowdin_file_name = get_crowdin_file(repository, file_name)
-    
-    if crowdin_file_name not in file_info:
-        return False
-
-    logging.info('Checking auto code translations for file %s' % file_name)
-
-    def is_within_code_tag(x):
-        return x.text and x.text.find('[TOC') == 0 or \
-            x.text and x.text.find('CVSS') != -1 and x.text.find('CVE') != -1 or \
-            x.name == 'code' or x.name == 'pre' or \
-            x.find_parent('code') is not None or x.find_parent('pre') is not None or \
-            x.find_parent(attrs={'id': 'front-matter'}) is not None
-
-    def is_rst_directive(x):
-        return x.text and ( \
-            x.text.find('====') != -1 or x.text.find('----') != -1 or \
-            x.text == '..' or x.text.find('::') != -1 or x.text.find(':') == 0 or \
-            x.text.find(':doc:') != -1 or x.text.find(':ref:') != -1 or \
-            x.text.lower() == x.text or \
-            x.text[-3:] == '.md' or x.text[-4:] == '.rst' \
-        )
-
-    def hide_translation(translation_id, response_data):
-        if not response_data['translation']['hidden']:
-            crowdin_http_request(
-                repository, '/backend/translation/change_visibility', 'GET',
-                translation_id=translation_id, hidden=1)
-
-    def always_true(x):
-        return True
-
-    def is_auto_translation(x):
-        return x['user']['login'] == 'is-user'
-
-    if file_name[-4:] == '.rst':
-        has_suggestions = process_suggestions(
-            repository, crowdin_file_name, file_info,
-            is_rst_directive, hide_translation, always_true)
-    else:
-        has_suggestions = process_suggestions(
-            repository, crowdin_file_name, file_info,
-            is_within_code_tag, hide_translation, is_auto_translation)
-
-    if not has_suggestions:
-        return False
-
-    target_file = get_translation_path(file, source_language, target_language)
-
-    if os.path.exists(target_file):
-        os.remove(target_file)
-
-    return True
 
 def get_file_ids(repository, files, file_info):
     candidate_files = {
