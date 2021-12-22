@@ -1,7 +1,7 @@
 FROM python:3.8
 
 RUN apt-get update
-RUN apt install -y p7zip p7zip-full pipenv rsync
+RUN apt install -y pipenv rsync
 
 COPY Pipfile /
 Copy Pipfile.lock /
@@ -17,6 +17,8 @@ RUN pip install pipenv && \
     pipenv install
 
 EXPOSE 7800
+
+RUN apt install -y dos2unix p7zip p7zip-full
 
 COPY entrypoint.sh /
 

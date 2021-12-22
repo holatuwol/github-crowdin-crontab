@@ -3,29 +3,38 @@
 rm -rf /liferay-learn/site/venv
 rm -rf /liferay-learn/site/build
 
-mkdir -p liferay-learn-build
+build_learn() {
+	local CLEAN_BUILD='y'
 
-rsync -rvci liferay-learn/ liferay-learn-build/ | tee changed_files.txt
-grep -vF contents.rst changed_files.txt | grep -o 'docs/[^/]*/[^/]*/[^/]*/' > changed_folders.txt
+	if [ -d liferay-learn-build ]; then
+		CLEAN_BUILD='n'
+	fi
 
-if [[ 0 -ne $(cat changed_folders.txt | wc -c) ]]; then
-	cd /liferay-learn-build
+	mkdir liferay-learn-build
 
-	for file in $(find docs -name 'contents.rst'); do
-		if [ "" == "$(grep "$(dirname ${file})" ../changed_folders.txt)" ]; then
-			rm ${file}
-		fi
-	done
+	find liferay-learn/ -name '*.rst' | xargs dos2unix
 
-	cd site
+	rsync -rvci liferay-learn/ liferay-learn-build/ | tee changed_files.txt
+
+	cd /liferay-learn-build/site
 
 	sed -i 's@python3 -m venv venv@python3 -m venv /opt/venv@g' build_site.sh
 	sed -i 's@source venv/bin/activate@source /opt/venv/bin/activate@g' build_site.sh
 
+	if [ "n" == "${CLEAN_BUILD}" ]; then
+		sed -i 's#rm -fr build#cat /changed_folders.txt | sed "s@../docs/@build/output/@g" | xargs -r rm -rf#g' build_site.sh
+		sed -i 's@for docs_dir_name in.*$@for docs_dir_name in $(cat /changed_folders.txt)@g' build_site.sh
+		grep -o 'docs/[^/]*/[^/]*/[^/]*/' /changed_files.txt | sort -u | grep -vF '_template' | awk '{ print "../" $1 }' > /changed_folders.txt
+	fi
+
 	./build_site.sh
-fi
+}
 
-echo 'Starting server on port 7800...'
+start_learn() {
+	echo 'Starting server on port 7800...'
+	cd /liferay-learn-build/site/build/output
+	python -m http.server 7800
+}
 
-cd /liferay-learn-build/site/build/output
-python -m http.server 7800
+build_learn
+start_learn
