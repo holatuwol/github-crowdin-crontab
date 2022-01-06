@@ -157,7 +157,7 @@ def update_landing(file_name):
 
 		name_line = None
 
-	with open(file_name, 'w') as f:
+	with open(file_name, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(new_content))
 
 for file_name in sys.argv[1:]:

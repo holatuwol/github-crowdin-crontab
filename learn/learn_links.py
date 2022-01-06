@@ -95,7 +95,7 @@ def fix_links(file, en_link_files, ja_link_files, missing_link_files):
 
 		new_ja_content = new_ja_content.replace(ja_link, matching_basenames[0])
 
-	with open(file, 'w') as f:
+	with open(file, 'w', encoding = 'utf-8') as f:
 		f.write(new_ja_content)
 
 def check_links(ja_file):
