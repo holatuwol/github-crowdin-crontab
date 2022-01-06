@@ -18,7 +18,7 @@ def is_missing_image(image_file, image_path, content):
 	return True
 
 def check_images(ja_file):
-	with open(ja_file, 'r') as f:
+	with open(ja_file, encoding='utf-8', mode = 'r') as f:
 		content = ''.join(f.readlines())
 
 	image_files = re.findall(r'\!\[[^\]]+\]\(([^\) ]+)[^\)]*\)', content)

@@ -38,7 +38,7 @@ def get_links(file):
 	if not os.path.exists(file):
 		return '', []
 
-	with open(file, 'r') as f:
+	with open(file, encoding='utf-8', mode = 'r') as f:
 		content = ''.join(f.readlines())
 
 	return content, [
@@ -62,7 +62,7 @@ def get_broken_links(file, link_files, content):
 	]
 
 def fix_links(file, en_link_files, ja_link_files, missing_link_files):
-	with open(file, 'r') as f:
+	with open(file, encoding='utf-8', mode = 'r') as f:
 		ja_content = ''.join(f.readlines())
 
 	if len(en_link_files) == len(ja_link_files):

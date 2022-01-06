@@ -56,7 +56,7 @@ def get_full_title(file_path, title, content):
 	return title
 
 def extract_title_from_md(file_path):
-	with open(file_path, 'r') as f:
+	with open(file_path, encoding='utf-8', mode = 'r') as f:
 		lines = f.readlines()
 
 	title = None
@@ -74,7 +74,7 @@ def extract_title_from_md(file_path):
 	return get_full_title(file_path, title, content)
 
 def extract_title_from_rst(file_path):
-	with open(file_path, 'r') as f:
+	with open(file_path, encoding='utf-8', mode = 'r') as f:
 		lines = f.readlines()
 
 	title = None
@@ -114,7 +114,7 @@ def extract_title(landing_file_name, html_file_name):
 def update_landing(file_name):
 	new_content = []
 
-	with open(file_name, 'r') as f:
+	with open(file_name, encoding='utf-8', mode = 'r') as f:
 		old_content = f.readlines()
 
 	name_line = None
