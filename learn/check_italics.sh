@@ -1,9 +1,19 @@
 #!/bin/bash
 
-git ls-files -- '*.md' | xargs sed -i.bak 's@\]\*\([^0-9A-Za-z[:space:][:punct:]]\)@\]* \1@g'
-git ls-files -- '*.md' | xargs sed -i.bak 's@\([^0-9A-Za-z[:space:]]\)<!--@\1 <!--@g'
-git ls-files -- '*.md' | xargs sed -i.bak 's@-->\([^0-9A-Za-z[:space:]]\)@--> \1@g'
+if [ -z "$@" ]; then
+	git ls-files -- '*.md' | xargs sed -i.bak 's@\]\*\([^0-9A-Za-z[:space:][:punct:]]\)@\]* \1@g'
+	git ls-files -- '*.md' | xargs sed -i.bak 's@\([^0-9A-Za-z[:space:]]\)<!--@\1 <!--@g'
+	git ls-files -- '*.md' | xargs sed -i.bak 's@-->\([^0-9A-Za-z[:space:]]\)@--> \1@g'
+else
+	sed -i.bak 's@\]\*\([^0-9A-Za-z[:space:][:punct:]]\)@\]* \1@g' $@
+	sed -i.bak 's@\([^0-9A-Za-z[:space:]]\)<!--@\1 <!--@g' $@
+	sed -i.bak 's@-->\([^0-9A-Za-z[:space:]]\)@--> \1@g' $@
+fi
 
 find . -name '*.bak' | xargs rm
 
-git ls-files -- '*.md' | xargs python "$(dirname ${BASH_SOURCE[0]})/learn_fix_italics.py"
+if [ -z "$@" ]; then
+	git ls-files -- '*.md' | xargs python "$(dirname ${BASH_SOURCE[0]})/learn_fix_italics.py"
+else
+	python "$(dirname ${BASH_SOURCE[0]})/learn_fix_italics.py" $@
+fi
