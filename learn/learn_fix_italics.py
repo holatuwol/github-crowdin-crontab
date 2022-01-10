@@ -1,6 +1,7 @@
 import string
 import subprocess
 import sys
+import urllib.parse
 
 valid_punctuation =  ' []()［］（）「」'
 
@@ -27,15 +28,28 @@ def remove_tags(text, tag):
 def is_valid_next_to_italic(ch):
 	return ch.isspace() or ch in valid_punctuation
 
+def is_link_text(text, left, right, pos1):
+	if text.rfind(left, 0, pos1) <= text.rfind(right, 0, pos1):
+		return False
+
+	pos2 = text.find(right, pos1)
+
+	if pos2 == -1:
+		return False
+
+	link_text = text[pos1:pos2]
+
+	return len(link_text) == len(urllib.parse.quote(link_text, safe=':/'))
+
 def fix_line_italics(line):
 	pos1 = line.find('_')
 
 	while pos1 != -1:
-		if line.rfind('[', 0, pos1) > line.rfind(']', 0, pos1) and line.find(']', pos1) != -1:
+		if is_link_text(line, '[', ']', pos1):
 			pos1 = line.find('_', line.find(']', pos1) + 1)
 			continue
 
-		if line.rfind('(', 0, pos1) > line.rfind(')', 0, pos1) and line.find(')', pos1) != -1:
+		if is_link_text(line, '(', ')', pos1):
 			pos1 = line.find('_', line.find(')', pos1) + 1)
 			continue
 
