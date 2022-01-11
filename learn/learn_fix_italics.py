@@ -54,30 +54,46 @@ def fix_line_italics(line, marker):
 	pos1 = 0
 
 	line_prefix = ''
+	leading_space = -1
+	leading_marker = -1
 
 	if marker[0] == '*':
-		leading_space = True
-		leading_marker = False
-
 		for i, ch in enumerate(line):
 			if ch == marker[0]:
-				leading_marker = True
-
-				if leading_space:
-					leading_space = False
-
-				continue
-
-			if ch.isspace() and leading_marker:
-				line_prefix = line[:i+1]
-				line = line[i+1:]
+				leading_marker = i
+			elif ch.isspace():
+				if leading_marker == -1:
+					leading_space = i
+			else:
 				break
-			elif not leading_space:
-				break
+
+	if marker == '*':
+		if leading_space < leading_marker:
+			if line[leading_marker+1].isspace():
+				line_prefix = line[:leading_marker+2]
+				line = line[leading_marker+2:]
+			else:
+				line_prefix = line[:leading_space+1]
+				line = line[leading_space+1:]
+		elif leading_space > -1:
+			line_prefix = line[:leading_space+1]
+			line = line[leading_space+1:]
+	elif leading_space > -1:
+		line_prefix = line[:leading_space+1]
+		line = line[leading_space+1:]
 
 	pos1 = line.find(marker, pos1)
 
 	while pos1 != -1:
+		backtick_count = len([ch for ch in line[:pos1] if ch == '`'])
+
+		if backtick_count % 2 == 1:
+			pos2 = line.find('`', pos1)
+
+			if pos2 != -1:
+				pos1 = line.find(marker, pos2)
+				continue
+
 		if is_link_text(line, '[', ']', pos1):
 			pos1 = line.find(marker, line.find(']', pos1) + 1)
 			continue
@@ -90,7 +106,7 @@ def fix_line_italics(line, marker):
 			pos2 = line.find('**', pos1+2)
 
 			if pos2 == -1:
-				return line
+				return line_prefix + line
 
 			pos1 = line.find(marker, pos2+2)
 			continue
@@ -98,7 +114,7 @@ def fix_line_italics(line, marker):
 		pos2 = line.find(marker, pos1+len(marker))
 
 		if pos2 == -1:
-			return line
+			return line_prefix + line
 
 		# strip all the whitespace before/after the italic marker, then re-add
 		# whatever whitespace is actually needed
@@ -121,7 +137,7 @@ def fix_line_italics(line, marker):
 			line = line[:pos1] + line[pos1+len(marker)] + marker + line[pos1+len(marker)+1:]
 			pos1 = pos1 + 1
 
-		if marker != '**' and line[:pos1+1] != '*':
+		if marker != '**' and line[pos1+1] != '*':
 			line = line[:pos1] + '**' + line[pos1+1:]
 			pos1 = pos1 + 1
 			pos2 = pos2 + 1
@@ -143,7 +159,7 @@ def fix_line_italics(line, marker):
 			line = line[:pos2-1] + marker + line[pos2-1] + line[pos2+len(marker):]
 			pos2 = pos2 - 1
 
-		if marker != '**' and line[:pos2+1] != '*':
+		if marker != '**' and line[pos2+1] != '*':
 			line = line[:pos2] + '**' + line[pos2+1:]
 			pos2 = pos2 + 1
 
