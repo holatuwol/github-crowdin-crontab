@@ -36,7 +36,8 @@ def translate_line_links(base_folder, line):
 
 		if link.find('https://learn.liferay.com/') == 0:
 			if link.find('/en/') != -1:
-				request_url = link.replace('/en/', '/ja/')
+				request_url = link
+
 				pos0 = request_url.find('#')
 
 				if pos0 != -1:
@@ -45,7 +46,16 @@ def translate_line_links(base_folder, line):
 				r = requests.get(request_url)
 
 				if r.status_code == 200:
-					ja_link = '[%s](%s)' % (text, link.replace('/en/', '/ja/'))
+					request_url = request_url.replace('/en/', '/ja/')
+
+					r = requests.get(request_url)
+
+					if r.status_code == 200:
+						ja_link = '[%s](%s)' % (text, link.replace('/en/', '/ja/'))
+					else:
+						print('missing translation:', request_url)
+				else:
+					print('broken link:', request_url)
 			elif link.find('/ja/') == -1:
 				pos2 = line.find('](', pos3)
 				continue
