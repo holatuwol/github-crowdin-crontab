@@ -78,6 +78,8 @@ def update_landing(file_name):
 
 			if relative_path.find('https://') == 0:
 				new_content.append(name_line)
+				new_content.append(path_line)
+				name_line = None
 				continue
 
 			if len(relative_path) == 0:
