@@ -3,7 +3,7 @@ import subprocess
 import sys
 import urllib.parse
 
-valid_punctuation =  ' []()［］（）「」'
+valid_punctuation =  '* []()［］（）「」'
 
 def _pandoc(input_text, *args):
     cmd = ['pandoc'] + list(args)
@@ -50,19 +50,52 @@ def is_link_text(text, left, right, start):
 
 	return len(link_text) == len(urllib.parse.quote(link_text, safe=':/?=#'))
 
-def fix_line_italics(line):
-	pos1 = line.find('_')
+def fix_line_italics(line, marker):
+	pos1 = 0
+
+	line_prefix = ''
+
+	if marker[0] == '*':
+		leading_space = True
+		leading_marker = False
+
+		for i, ch in enumerate(line):
+			if ch == marker[0]:
+				leading_marker = True
+
+				if leading_space:
+					leading_space = False
+
+				continue
+
+			if ch.isspace() and leading_marker:
+				line_prefix = line[:i+1]
+				line = line[i+1:]
+				break
+			elif not leading_space:
+				break
+
+	pos1 = line.find(marker, pos1)
 
 	while pos1 != -1:
 		if is_link_text(line, '[', ']', pos1):
-			pos1 = line.find('_', line.find(']', pos1) + 1)
+			pos1 = line.find(marker, line.find(']', pos1) + 1)
 			continue
 
 		if is_link_text(line, '(', ')', pos1):
-			pos1 = line.find('_', line.find(')', pos1) + 1)
+			pos1 = line.find(marker, line.find(')', pos1) + 1)
 			continue
 
-		pos2 = line.find('_', pos1+1)
+		if marker == '*' and line[pos1+1] == '*':
+			pos2 = line.find('**', pos1+2)
+
+			if pos2 == -1:
+				return line
+
+			pos1 = line.find(marker, pos2+2)
+			continue
+
+		pos2 = line.find(marker, pos1+len(marker))
 
 		if pos2 == -1:
 			return line
@@ -75,8 +108,8 @@ def fix_line_italics(line):
 			pos1 = pos1 - 1
 			pos2 = pos2 - 1
 
-		while pos1+2 < len(line) and line[pos1+1].isspace():
-			line = line[:pos1+1] + line[pos1+2:]
+		while pos1+len(marker)+1 < len(line) and line[pos1+len(marker)].isspace():
+			line = line[:pos1+len(marker)] + line[pos1+len(marker)+1:]
 			pos2 = pos2 - 1
 
 		if pos1 > 0 and not is_valid_next_to_italic(line[pos1-1]):
@@ -84,9 +117,14 @@ def fix_line_italics(line):
 			pos1 = pos1 + 1
 			pos2 = pos2 + 1
 
-		if pos1+1 < len(line) and line[pos1+1] in valid_punctuation:
-			line = line[:pos1] + line[pos1+1] + '_' + line[pos1+2:]
+		if pos1+len(marker)+1 < len(line) and line[pos1+len(marker)] in valid_punctuation:
+			line = line[:pos1] + line[pos1+len(marker)] + marker + line[pos1+len(marker)+1:]
 			pos1 = pos1 + 1
+
+		if marker != '**' and line[:pos1+1] != '*':
+			line = line[:pos1] + '**' + line[pos1+1:]
+			pos1 = pos1 + 1
+			pos2 = pos2 + 1
 
 		# strip all the whitespace before/after the italic marker, then re-add
 		# whatever whitespace is actually needed
@@ -95,19 +133,23 @@ def fix_line_italics(line):
 			line = line[:pos2-1] + line[pos2:]
 			pos2 = pos2 - 1
 
-		while pos2+2 < len(line) and line[pos2+1].isspace():
-			line = line[:pos2+1] + line[pos2+2:]
+		while pos2+len(marker)+1 < len(line) and line[pos2+len(marker)].isspace():
+			line = line[:pos2+len(marker)] + line[pos2+len(marker)+1:]
 
-		if pos2+2 < len(line) and not is_valid_next_to_italic(line[pos2+1]):
-			line = line[:pos2+1] + ' ' + line[pos2+1:]
+		if pos2+len(marker)+1 < len(line) and not is_valid_next_to_italic(line[pos2+len(marker)]):
+			line = line[:pos2+len(marker)] + ' ' + line[pos2+len(marker):]
 
 		if pos2 > 0 and line[pos2-1] in valid_punctuation:
-			line = line[:pos2-1] + '_' + line[pos2-1] + line[pos2+1:]
+			line = line[:pos2-1] + marker + line[pos2-1] + line[pos2+len(marker):]
 			pos2 = pos2 - 1
 
-		pos1 = line.find('_', pos2 + 1)
+		if marker != '**' and line[:pos2+1] != '*':
+			line = line[:pos2] + '**' + line[pos2+1:]
+			pos2 = pos2 + 1
 
-	return line
+		pos1 = line.find(marker, pos2 + 1)
+
+	return line_prefix + line
 
 def extract_text(input_text):
 	html = _pandoc(input_text, '--from', 'markdown', '--to', 'html')
@@ -153,7 +195,10 @@ def fix_italics(input_file):
 
 			in_directive = False
 
-		fixed_line = fix_line_italics(line)
+		fixed_line = line
+		fixed_line = fix_line_italics(fixed_line, '_')
+		fixed_line = fix_line_italics(fixed_line, '*')
+		fixed_line = fix_line_italics(fixed_line, '**')
 
 		if fixed_line != line:
 			malformed_lines.append(line)
