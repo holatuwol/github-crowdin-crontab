@@ -45,6 +45,9 @@ def is_link_text(text, left, right, start):
 	if link_text[0] == '%' and link_text[-1] == '%':
 		return True
 
+	if link_text[0] == '$' and link_text[-1] == '$':
+		return True
+
 	return len(link_text) == len(urllib.parse.quote(link_text, safe=':/?=#'))
 
 def fix_line_italics(line):

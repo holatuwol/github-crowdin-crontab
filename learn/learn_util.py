@@ -30,6 +30,12 @@ def get_exact_file(source_file, target_file, relativize):
 	return None
 
 def get_basename_files(source_file, target_file, relativize=True):
+	if source_file.find('/en/') == -1 and source_file.find('/ja/') == -1:
+		return []
+
+	if target_file.find('/en/') == -1 and target_file.find('/ja/') == -1:
+		return []
+
 	if os.path.exists(target_file):
 		return [target_file if relativize else resolve_path(os.getcwd(), target_file)]
 
@@ -49,6 +55,9 @@ def get_basename_files(source_file, target_file, relativize=True):
 
 	while os.path.basename(base_dir) != 'ja' and os.path.basename(base_dir) != 'en':
 		base_dir = os.path.dirname(base_dir)
+
+		if base_dir == '/':
+			print(source_file, target_file)
 
 	for root_dir, folders, files in os.walk(base_dir):
 		for file in files:
@@ -110,3 +119,65 @@ def get_en_file(ja_file):
 		return basename_files[0]
 
 	return ja_file.replace('/ja/', '/en/')
+
+
+def get_full_title(file_path, title, content):
+	if file_path.find('/en/') != -1:
+		if content.find('Coming Soon!') != -1:
+			return title + ' (Coming Soon!)'
+
+		readme_path = file_path[:file_path.rfind('.')] + '/README.rst'
+
+		if content.find(readme_path) != -1:
+			return extract_title_from_rst(readme_path)
+
+		return title
+
+	if file_path.find('/ja/') != -1:
+		if content.find('近日公開！') != -1:
+			return title + ' (近日公開！)'
+
+		readme_path = file_path[:file_path.rfind('.')] + '/README.rst'
+
+		if content.find(readme_path) != -1:
+			return extract_title_from_rst(readme_path)
+
+		return title
+
+	return title
+
+def extract_title_from_md(file_path):
+	with open(file_path, encoding='utf-8', mode = 'r') as f:
+		lines = f.readlines()
+
+	title = None
+
+	for line in lines:
+		if line.find('# ') == 0:
+			title = line[2:].strip()
+			break
+
+	if title is None:
+		return None
+
+	content = ''.join(lines)
+
+	return get_full_title(file_path, title, content)
+
+def extract_title_from_rst(file_path):
+	with open(file_path, encoding='utf-8', mode = 'r') as f:
+		lines = f.readlines()
+
+	title = None
+
+	for line in lines:
+		if len(line.strip()) != 0:
+			title = line.strip()
+			break
+
+	if title is None:
+		return None
+
+	content = ''.join(lines)
+
+	return get_full_title(file_path, title, content)

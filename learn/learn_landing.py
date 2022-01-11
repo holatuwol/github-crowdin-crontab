@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from learn_util import *
 import json
 import os
 import sys
@@ -29,67 +30,6 @@ def set_string_value(line, value):
 	suffix = line[line.rfind(sep):]
 
 	return '%s%s%s' % (prefix, escaped_value, suffix)
-
-def get_full_title(file_path, title, content):
-	if file_path.find('/en/') != -1:
-		if content.find('Coming Soon!') != -1:
-			return title + ' (Coming Soon!)'
-
-		readme_path = file_path[:file_path.rfind('.')] + '/README.rst'
-
-		if content.find(readme_path) != -1:
-			return extract_title_from_rst(readme_path)
-
-		return title
-
-	if file_path.find('/ja/') != -1:
-		if content.find('近日公開！') != -1:
-			return title + ' (近日公開！)'
-
-		readme_path = file_path[:file_path.rfind('.')] + '/README.rst'
-
-		if content.find(readme_path) != -1:
-			return extract_title_from_rst(readme_path)
-
-		return title
-
-	return title
-
-def extract_title_from_md(file_path):
-	with open(file_path, encoding='utf-8', mode = 'r') as f:
-		lines = f.readlines()
-
-	title = None
-
-	for line in lines:
-		if line.find('# ') == 0:
-			title = line[2:].strip()
-			break
-
-	if title is None:
-		return None
-
-	content = ''.join(lines)
-
-	return get_full_title(file_path, title, content)
-
-def extract_title_from_rst(file_path):
-	with open(file_path, encoding='utf-8', mode = 'r') as f:
-		lines = f.readlines()
-
-	title = None
-
-	for line in lines:
-		if len(line.strip()) != 0:
-			title = line.strip()
-			break
-
-	if title is None:
-		return None
-
-	content = ''.join(lines)
-
-	return get_full_title(file_path, title, content)
 
 def extract_title(landing_file_name, html_file_name):
 	base_name = os.path.dirname(os.path.abspath(landing_file_name))
