@@ -20,6 +20,7 @@ build_learn() {
 
 	sed -i 's@python3 -m venv venv@python3 -m venv /opt/venv@g' build_site.sh
 	sed -i 's@source venv/bin/activate@source /opt/venv/bin/activate@g' build_site.sh
+	sed -i 's@mv build/output/@cp -R build/output/@g' build_site.sh
 
 	if [ "n" == "${CLEAN_BUILD}" ]; then
 		sed -i 's#rm -fr build#cat /changed_folders.txt | sed "s@../docs/@build/output/@g" | xargs -r rm -rf#g' build_site.sh
