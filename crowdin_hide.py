@@ -128,13 +128,13 @@ def should_hide_tag(tag):
         inner_html = tag.decode_contents()
 
         if inner_html[:5] == '<code' and inner_html[-7:] == '</code>':
-        	return True
+            return True
         
         if inner_html[:4] == '<pre' and inner_html[-5:] == '</pre>':
-        	return True
+            return True
 
         if inner_html[:4] == '<img' and inner_html[-2:] == '/>':
-        	return True
+            return True
 
         return False
 
@@ -145,8 +145,11 @@ def should_hide_tag(tag):
         if x is None or len(x) == 0:
             continue
 
-        if x[-2:] == '::' or x[0] == '{':
+        if x[-2:] == '::':
             return False
+
+        if x[0] == '{':
+            return x in ['{toctree}', '{raw}', '{literalinclude}']
 
     return True
 
@@ -154,12 +157,12 @@ def is_hidden_link(x):
     hidden_block = x.find_parent(attrs={'class': 'hidden_texts_block'})
 
     if hidden_block is None:
-    	return False
+        return False
 
     hidden_title = hidden_block.find(attrs={'class': 'hidden_phrases_title'})
 
     if hidden_title is None:
-    	return False
+        return False
 
     return hidden_title.text.strip() == 'Link addresses'
 
@@ -213,7 +216,7 @@ def hide_code_translations(repository, source_language, target_language, file_na
 
     return has_suggestions
 
-def process_code_translations(project_id, project_name, project_folder, source_language, target_language):
+def process_code_translations(project_id, project_name, project_folder, source_language, target_language, force=False):
     status_code, response_text = crowdin_request(None, '/account/get-projects', 'GET', {'json': 'true'})
 
     projects = json.loads(response_text)['projects']
@@ -230,7 +233,7 @@ def process_code_translations(project_id, project_name, project_folder, source_l
     file_info = get_crowdin_file_info(repository, target_language)
 
     for file_name, file_metadata in file_info.items():
-        if 'id' in file_metadata and file_metadata['phrases'] != file_metadata['translated']:
+        if force or 'id' in file_metadata and file_metadata['phrases'] != file_metadata['translated']:
             hide_code_translations(repository, source_language, target_language, file_name, file_metadata)
 
 if __name__ == '__main__':
