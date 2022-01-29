@@ -18,7 +18,7 @@ RUN pip install pipenv && \
 
 EXPOSE 7800
 
-RUN apt install -y dos2unix p7zip p7zip-full
+RUN apt install -y dos2unix jq p7zip p7zip-full
 
 COPY entrypoint.sh /
 
