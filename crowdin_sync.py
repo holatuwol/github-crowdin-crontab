@@ -1,4 +1,4 @@
-from crowdin import crowdin_download_translations, crowdin_upload_sources, delete_code_translations, fix_product_name_tokens, get_crowdin_file_info, pre_translate, save_glossary, save_translation_memory
+from crowdin import crowdin_download_translations, crowdin_upload_sources, fix_product_name_tokens, get_crowdin_file_info, pre_translate, save_glossary, save_translation_memory
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders, get_translation_path
 import git
@@ -55,9 +55,7 @@ def cleanup_files(repository, source_language, target_language, all_files, old_f
 def update_sources(repository, source_language, target_language, new_files, all_files):
     old_file_info, file_info = crowdin_upload_sources(repository, source_language, target_language, new_files)
 
-    update_files = set(new_files)
-
-    file_info = pre_translate(repository, source_language, target_language, update_files, all_files, file_info)
+    file_info = pre_translate(repository, source_language, target_language, all_files, file_info)
 
     crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
 
@@ -148,7 +146,7 @@ def update_repository(repository, source_language, target_language, refresh_path
 
     new_files, all_files, file_info = get_repository_state(repository, source_language, target_language, refresh_paths, check_upstream)
 
-    if not sync_sources:
+    if refresh_paths is None or not sync_sources:
         all_files = []
 
         for crowdin_file, metadata in file_info.items():

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from crowdin_hide import hide_code_translations
 from crowdin_util import crowdin_http_request, crowdin_request, get_crowdin_file_info
 from datetime import datetime, timedelta
 import git
@@ -317,8 +318,6 @@ def translate_with_machine(repository, engine, file_ids):
         if response_data['success']:
             wait_for_translation(repository)
 
-
-
 def get_file_ids(repository, files, file_info):
     candidate_files = {
         file: get_crowdin_file(repository, file) for file in files
@@ -330,32 +329,24 @@ def get_file_ids(repository, files, file_info):
                 if crowdin_file in file_info
     }
 
-def pre_translate(repository, source_language, target_language, code_check_needed, translation_needed, file_info):
-    code_check_needed_file_ids = get_file_ids(repository, code_check_needed, file_info)
-
-    for file, crowdin_file in sorted(code_check_needed_file_ids.items()):
-        file_metadata = file_info[get_crowdin_file(repository, file)]
-
-        if file_metadata['phrases'] != file_metadata['translated']:
-            delete_code_translations(repository, source_language, target_language, file, file_info)
-
-    translation_needed_file_ids = get_file_ids(repository, translation_needed, file_info)
+def pre_translate(repository, source_language, target_language, all_files, file_info):
+    file_ids = get_file_ids(repository, all_files, file_info)
 
     missing_phrases_files = {}
 
-    for file, crowdin_file in sorted(translation_needed_file_ids.items()):
+    for file, crowdin_file in sorted(file_ids.items()):
         file_metadata = file_info[get_crowdin_file(repository, file)]
 
         if file_metadata['phrases'] != file_metadata['translated']:
-            missing_phrases_files[crowdin_file] = crowdin_file
             print('%s (%s != %s)' % (file, file_metadata['phrases'], file_metadata['translated']))
+            hide_code_translations(repository, source_language, target_language, crowdin_file, file_metadata)
+            missing_phrases_files[crowdin_file] = crowdin_file
         else:
             print('%s (%s == %s)' % (file, file_metadata['phrases'], file_metadata['translated']))
 
-    if len(missing_phrases_files) > 0:
-        #translate_with_machine(repository, 'tm', missing_phrases_files)
-        translate_with_machine(repository, 'deepl-translator', missing_phrases_files)
-        translate_with_machine(repository, 'google-translate', missing_phrases_files)
+    #translate_with_machine(repository, 'tm', missing_phrases_files)
+    translate_with_machine(repository, 'deepl-translator', missing_phrases_files)
+    translate_with_machine(repository, 'google-translate', missing_phrases_files)
 
     file_info = get_crowdin_file_info(repository, target_language)
     
