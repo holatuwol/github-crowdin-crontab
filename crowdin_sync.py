@@ -57,13 +57,7 @@ def update_sources(repository, source_language, target_language, new_files, all_
 
     update_files = set(new_files)
 
-    if repository.crowdin.delete_enabled:
-        file_info = pre_translate(repository, source_language, target_language, update_files, all_files, file_info)
-    else:
-        for file in update_files:
-            delete_code_translations(repository, source_language, target_language, file, file_info)
-
-        file_info = get_crowdin_file_info(repository, target_language)
+    file_info = pre_translate(repository, source_language, target_language, update_files, all_files, file_info)
 
     crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
 
