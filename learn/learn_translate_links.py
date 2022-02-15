@@ -5,6 +5,87 @@ import string
 import subprocess
 import sys
 
+def fix_learn_code(line):
+	pos0 = line.find('https://learn.liferay.com/')
+
+	while pos0 != -1:
+		pos1 = line.find(' ', pos0)
+
+		if pos1 == -1:
+			pos1 = len(line)
+
+		link = line[pos0:pos1]
+
+		fixed_link = fix_learn_link(None, link)
+
+		line = line[:pos0] + fixed_link + line[pos1:]
+
+		pos0 = line.find('https://learn.liferay.com/', pos0 + len(fixed_link))
+
+	return line
+
+def fix_learn_link(text, link):
+	if link.find('https://learn.liferay.com/') != 0:
+		return link
+
+	request_url = link
+
+	hash_index = request_url.find('#')
+
+	if hash_index != -1:
+		request_url = request_url[:hash_index]
+
+	if request_url.find('/ja/') != -1:
+		request_url = request_url.replace('/ja/', '/en/')
+
+	r = requests.get(request_url)
+
+	if r.status_code == 200:
+		content_en = None
+
+		if '/html' in r.headers['content-type']:
+			r.encoding = r.apparent_encoding
+			content_en = r.text
+
+		request_url = request_url.replace('/en/', '/ja/')
+
+		r = requests.get(request_url)
+
+		if r.status_code != 200:
+			print('missing translation:', request_url)
+			return '[%s](%s)' % (text, link) if text is not None else link
+
+		content_ja = None
+
+		if '/html' in r.headers['content-type']:
+			r.encoding = r.apparent_encoding
+			content_ja = r.text
+
+		pos0 = content_en.find('<h1>')
+		link_ja = link.replace('/en/', '/ja/')
+
+		if pos0 == -1:
+			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+
+		pos1 = content_en.find('<', pos0 + 4)
+
+		if text != content_en[pos0+4:pos1]:
+			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+
+		pos0 = content_ja.find('<h1>')
+
+		if pos0 == -1:
+			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+
+		pos1 = content_ja.find('<', pos0 + 4)
+
+		text_ja = content_ja[pos0+4:pos1]
+
+		return '[%s](%s)' % (text_ja, link_ja) if text is not None else link_ja
+
+	print('broken link:', request_url)
+	return '[%s](%s)' % (text, link) if text is not None else link
+
 def translate_line_links(base_folder, line):
 	pos2 = line.find('](')
 
@@ -35,30 +116,8 @@ def translate_line_links(base_folder, line):
 		ja_link = en_link
 
 		if link.find('https://learn.liferay.com/') == 0:
-			if link.find('/en/') != -1:
-				request_url = link
-
-				pos0 = request_url.find('#')
-
-				if pos0 != -1:
-					request_url = request_url[:pos0]
-
-				r = requests.get(request_url)
-
-				if r.status_code == 200:
-					request_url = request_url.replace('/en/', '/ja/')
-
-					r = requests.get(request_url)
-
-					if r.status_code == 200:
-						ja_link = '[%s](%s)' % (text, link.replace('/en/', '/ja/'))
-					else:
-						print('missing translation:', request_url)
-				else:
-					print('broken link:', request_url)
-			elif link.find('/ja/') == -1:
-				pos2 = line.find('](', pos3)
-				continue
+			if link.find('/en/') != -1 or link.find('/ja/') != -1:
+				ja_link = fix_learn_link(text, link)
 		elif link[0] == '.' and link[-3:] == '.md':
 			ja_file = resolve_path(base_folder, link)
 			en_file = get_en_file(ja_file)
@@ -128,7 +187,13 @@ def translate_links(input_file):
 			continue
 
 		if in_code_block:
-			fixed_lines.append(line)
+			fixed_line = fix_learn_code(line)
+
+			if fixed_line != line:
+				malformed_lines.append(line)
+
+			fixed_lines.append(fixed_line)
+
 			continue
 
 		if line.find('..') == 0:
