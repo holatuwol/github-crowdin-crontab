@@ -2,12 +2,17 @@ import os
 
 def resolve_path(folder, file):
 	while file[0] == '.':
-		while file[:2] == './':
-			file = file[2:]
 
-		while file[:3] == '../':
+		for i, ch in enumerate(file):
+			if ch == '/':
+				break
+			elif ch != '.':
+				return os.path.join(folder, file)
+
+		if i > 1:
 			folder = os.path.dirname(folder)
-			file = file[3:]
+
+		file = file[i+1:]
 
 	return os.path.join(folder, file)
 
