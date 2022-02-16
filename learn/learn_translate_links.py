@@ -55,6 +55,11 @@ def fix_learn_link(text, link):
 			print('missing translation:', request_url)
 			return '[%s](%s)' % (text, link) if text is not None else link
 
+		link_ja = link.replace('/en/', '/ja/')
+
+		if content_en is None:
+			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+
 		content_ja = None
 
 		if '/html' in r.headers['content-type']:
@@ -62,7 +67,6 @@ def fix_learn_link(text, link):
 			content_ja = r.text
 
 		pos0 = content_en.find('<h1>')
-		link_ja = link.replace('/en/', '/ja/')
 
 		if pos0 == -1:
 			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
