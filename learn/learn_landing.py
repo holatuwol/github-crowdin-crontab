@@ -89,7 +89,11 @@ def update_landing(file_name):
 			absolute_path, new_title = extract_title(file_name, relative_path)
 
 			if new_title is None:
-				print('[%s:%d] Unable to extract title from path: %s' % (file_name, i, relative_path))
+				if os.path.exists(absolute_path):
+					print('[%s:%d] Unable to extract title from path: %s' % (file_name, i, relative_path))
+				else:
+					print('[%s:%d] Unable to find file: %s' % (file_name, i, relative_path))
+
 				new_content.append(name_line)
 				has_error = True
 			else:
