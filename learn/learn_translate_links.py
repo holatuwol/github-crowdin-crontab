@@ -90,7 +90,7 @@ def fix_learn_link(text, link):
 	print('broken link:', request_url)
 	return '[%s](%s)' % (text, link) if text is not None else link
 
-def translate_line_links(base_folder, line):
+def translate_line_links(base_folder, line, has_toc_tree):
 	pos2 = line.find('](')
 
 	while pos2 != -1:
@@ -124,15 +124,22 @@ def translate_line_links(base_folder, line):
 				ja_link = fix_learn_link(text, link)
 		elif link[0] == '.' and link[-3:] == '.md':
 			ja_file = resolve_path(base_folder, link)
-			en_file = get_en_file(ja_file)
 
-			if not os.path.exists(en_file) or not os.path.exists(ja_file):
+			if not os.path.exists(ja_file):
 				pos2 = line.find('](', pos3)
 				continue
 
-			en_title = extract_title_from_md(en_file)
+			en_file = get_en_file(ja_file)
 
-			if text != en_title:
+			en_title = None
+
+			if os.path.exists(en_file):
+				en_title = extract_title_from_md(en_file)
+
+				if text != en_title:
+					pos2 = line.find('](', pos3)
+					continue
+			elif not has_toc_tree:
 				pos2 = line.find('](', pos3)
 				continue
 
@@ -155,6 +162,8 @@ def translate_line_links(base_folder, line):
 def translate_links(input_file):
 	with open(input_file, 'r', encoding = 'utf-8') as f:
 		input_lines = f.readlines()
+
+	has_toc_tree = ''.join(input_lines).find('```{toctree}') != -1
 
 	fixed_lines = []
 	malformed_lines = []
@@ -216,7 +225,7 @@ def translate_links(input_file):
 
 			in_directive = False
 
-		fixed_line = translate_line_links(base_folder, line)
+		fixed_line = translate_line_links(base_folder, line, has_toc_tree)
 
 		if fixed_line != line:
 			malformed_lines.append(line)

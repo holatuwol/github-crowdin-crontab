@@ -1,8 +1,10 @@
 import os
 
 def resolve_path(folder, file):
-	while file[0] == '.':
+	while folder[-1] == '/':
+		folder = folder[:-1]
 
+	while file[0] == '.':
 		for i, ch in enumerate(file):
 			if ch == '/':
 				break
