@@ -90,7 +90,7 @@ def fix_learn_link(text, link):
 	print('broken link:', request_url)
 	return '[%s](%s)' % (text, link) if text is not None else link
 
-def translate_line_links(base_folder, line, has_toc_tree):
+def translate_line_links(input_file, base_folder, line, has_toc_tree):
 	pos2 = line.find('](')
 
 	while pos2 != -1:
@@ -126,6 +126,7 @@ def translate_line_links(base_folder, line, has_toc_tree):
 			ja_file = resolve_path(base_folder, link)
 
 			if not os.path.exists(ja_file):
+				#print('[%s] broken link: %s' % (input_file, link))
 				pos2 = line.find('](', pos3)
 				continue
 
@@ -225,7 +226,7 @@ def translate_links(input_file):
 
 			in_directive = False
 
-		fixed_line = translate_line_links(base_folder, line, has_toc_tree)
+		fixed_line = translate_line_links(input_file, base_folder, line, has_toc_tree)
 
 		if fixed_line != line:
 			malformed_lines.append(line)
