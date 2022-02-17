@@ -38,6 +38,9 @@ def update_header_ids(ja_file):
 
 	en_file = os.path.join(os.getcwd(), ja_file).replace('/ja/', '/en/')
 
+	if not os.path.exists(en_file):
+		return
+
 	with open(en_file, 'r', encoding = 'utf-8') as f:
 		header_anchors = [
 			get_header_anchor(line)
