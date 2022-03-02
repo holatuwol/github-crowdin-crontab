@@ -608,11 +608,10 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     return articles, article_paths, refresh_articles, refresh_paths
 
 tracked_categories = []
+tracked_labels = []
 
 with open('%s/zendesk_tracked_categories.txt' % initial_dir, 'r') as f:
     tracked_categories = [line.strip() for line in f.readlines()]
-
-tracked_labels = []
 
 with open('%s/zendesk_tracked_labels.txt' % initial_dir, 'r') as f:
     tracked_labels = [line.strip() for line in f.readlines()]

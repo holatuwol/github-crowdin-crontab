@@ -1,9 +1,10 @@
 from collections import namedtuple
+from inspect import getsourcefile
 import git
 import logging
 import os
 
-initial_dir = os.getcwd()
+initial_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))
 
 GitHubRepository = namedtuple(
     'GitHubRepository',
