@@ -1,4 +1,39 @@
+import os
 import sys
+
+def get_path(input_folder, link_file):
+	if link_file[0] != '/':
+		return os.path.join(input_folder, link_file)
+
+	folder = os.getcwd()
+
+	while not os.path.exists(os.path.join(folder, 'contents.rst')):
+		folder = os.path.dirname(folder)
+
+	return os.path.join(folder, link_file[1:])
+
+def switch_rst_doclink(code_block_type, input_folder, line):
+	x = line.find(':doc:`')
+
+	while x != -1:
+		y = line.find('`', x + 6)
+
+		link_file = line[x+6:y] + '.md'
+
+		link_file_path = get_path(input_folder, link_file)
+
+		if os.path.exists(link_file_path):
+			with open(link_file_path, 'r') as f:
+				title = f.readlines()[0][1:].strip()
+		else:
+			print(link_file)
+			title = link_file
+
+		line = '%s[%s](%s)%s' % (line[:x], title, link_file, line[y+1:])
+
+		x = line.find(':doc:`')
+
+	return line
 
 def switch_rst_links(code_block_type, line):
 	if len(code_block_type) <= 3 or code_block_type[3] != '{':
@@ -43,6 +78,11 @@ def fix_rst_blocks(input_file):
 	code_block_type = None
 	in_directive = False
 
+	input_folder = os.path.dirname(input_file)
+
+	if input_folder == '':
+		input_folder = '.'
+
 	for line in input_lines:
 		if line.strip().find('```') == 0:
 			in_code_block = not in_code_block
@@ -58,7 +98,7 @@ def fix_rst_blocks(input_file):
 		if in_code_block:
 			fixed_line = line
 
-			fixed_line = switch_rst_links(code_block_type, fixed_line)
+			fixed_line = switch_rst_links(code_block_type, line)
 			fixed_line = switch_rst_inline_code(code_block_type, fixed_line)
 
 			if line != fixed_line:
@@ -83,7 +123,14 @@ def fix_rst_blocks(input_file):
 
 			in_directive = False
 
-		fixed_lines.append(line)
+		fixed_line = line
+
+		fixed_line = switch_rst_doclink(code_block_type, input_folder, line)
+
+		if line != fixed_line:
+			malformed_lines.append(line)
+
+		fixed_lines.append(fixed_line)
 
 	if len(malformed_lines) == 0:
 		return
