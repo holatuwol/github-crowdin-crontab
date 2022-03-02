@@ -187,12 +187,12 @@ def translate_links(input_file):
 			fixed_lines.append(line)
 			continue
 
-		if line.find('```') == 0:
+		if line.lstrip().find('```') == 0:
 			if in_note_block:
 				in_note_block = False
 			elif in_code_block:
 				in_code_block = False
-			elif line[3] == '{':
+			elif line.find('{') != -1:
 				in_note_block = True
 			else:
 				in_code_block = True

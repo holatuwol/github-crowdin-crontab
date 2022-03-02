@@ -186,7 +186,7 @@ def fix_italics(input_file):
 	in_directive = False
 
 	for line in input_lines:
-		if line.find('```') == 0:
+		if line.strip().find('```') == 0:
 			in_code_block = not in_code_block
 			fixed_lines.append(line)
 			continue

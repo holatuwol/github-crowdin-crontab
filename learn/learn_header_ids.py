@@ -59,6 +59,7 @@ def update_header_ids(ja_file):
 	in_comment = False
 
 	fixed_lines = []
+	translated_header_anchors = []
 	updated_file = False
 
 	for i, line in enumerate(input_lines):
@@ -72,12 +73,12 @@ def update_header_ids(ja_file):
 			fixed_lines.append(line)
 			continue
 
-		if line.find('```') == 0:
+		if line.lstrip().find('```') == 0:
 			if in_note_block:
 				in_note_block = False
 			elif in_code_block:
 				in_code_block = False
-			elif line[3] == '{':
+			elif line.find('{') != -1:
 				in_note_block = True
 			else:
 				in_code_block = True
@@ -105,7 +106,9 @@ def update_header_ids(ja_file):
 
 			in_directive = False
 
-		if is_matching_heading(line):
+		if is_matching_heading(line) and header_index < len(header_anchors):
+			translated_header_anchors.append(line)
+
 			if len(fixed_lines) < 2:
 				updated_file = False
 			elif fixed_lines[-1] == '\n' and fixed_lines[-2].find('<a name="') == -1:
@@ -131,7 +134,7 @@ def update_header_ids(ja_file):
 		return
 
 	if header_index != len(header_anchors):
-		print('mismatched header count:', ja_file)
+		print('mismatched header count:', header_index, len(header_anchors), ja_file)
 		return
 
 	with open(ja_file, 'w', encoding = 'utf-8') as f:
