@@ -109,7 +109,7 @@ def update_landing(file_name):
 				new_content.append(name_line)
 				continue
 
-			absolute_path, new_title = extract_title(file_name, relative_path)
+			absolute_path, new_title = extract_title(file_name, relative_path.strip())
 
 			if new_title is None:
 				if os.path.exists(absolute_path):

@@ -43,6 +43,11 @@ def switch_rst_links(code_block_type, line):
 
 	while y != -1:
 		w = line.rfind('`', 0, y)
+
+		if w == -1:
+			print(line)
+			return line
+
 		x = line.find('<', w)
 
 		line = '%s[%s](%s)%s' % (line[:w], line[w+1:x].strip(), line[x+1:y].strip(), line[y+(3 if line[y+2] == '_' else 2):])
