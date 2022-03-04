@@ -40,55 +40,64 @@ def fix_learn_link(text, link):
 
 	r = requests.get(request_url)
 
-	if r.status_code == 200:
-		content_en = None
+	if r.status_code != 200:
+		print('broken link:', request_url)
+		return '[%s](%s)' % (text, link) if text is not None else link
 
-		if '/html' in r.headers['content-type']:
-			r.encoding = r.apparent_encoding
-			content_en = r.text
+	content_en = None
 
-		request_url = request_url.replace('/en/', '/ja/')
+	if '/html' in r.headers['content-type']:
+		r.encoding = r.apparent_encoding
+		content_en = r.text
 
-		r = requests.get(request_url)
+	request_url = request_url.replace('/en/', '/ja/')
 
-		if r.status_code != 200:
-			print('missing translation:', request_url)
-			return '[%s](%s)' % (text, link) if text is not None else link
+	r = requests.get(request_url)
 
-		link_ja = link.replace('/en/', '/ja/')
+	if r.status_code != 200:
+		print('missing translation:', request_url)
+		return '[%s](%s)' % (text, link) if text is not None else link
 
-		if content_en is None:
-			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+	link_ja = link.replace('/en/', '/ja/')
 
-		content_ja = None
+	if content_en is None:
+		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
 
-		if '/html' in r.headers['content-type']:
-			r.encoding = r.apparent_encoding
-			content_ja = r.text
+	content_ja = None
 
-		pos0 = content_en.find('<h1>')
+	if '/html' in r.headers['content-type']:
+		r.encoding = r.apparent_encoding
+		content_ja = r.text
 
-		if pos0 == -1:
-			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+	pos0 = content_en.find('<h1>')
 
-		pos1 = content_en.find('<', pos0 + 4)
+	if pos0 == -1:
+		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
 
-		if text != content_en[pos0+4:pos1]:
-			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+	pos1 = content_en.find('<', pos0 + 4)
 
-		pos0 = content_ja.find('<h1>')
+	if text != content_en[pos0+4:pos1]:
+		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
 
-		if pos0 == -1:
-			return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+	pos0 = content_ja.find('<h1>')
 
-		pos1 = content_ja.find('<', pos0 + 4)
+	if pos0 == -1:
+		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
 
-		text_ja = content_ja[pos0+4:pos1]
+	pos1 = content_ja.find('<', pos0 + 4)
 
-		return '[%s](%s)' % (text_ja, link_ja) if text is not None else link_ja
+	text_ja = content_ja[pos0+4:pos1]
 
-	print('broken link:', request_url)
-	return '[%s](%s)' % (text, link) if text is not None else link
+	return '[%s](%s)' % (text_ja, link_ja) if text is not None else link_ja
+
+def fix_help_center_link(text, link):
+	if link.find('https://help.liferay.com/hc/') != 0:
+		return link
+
+	ja_text = get_help_center_title(link, 'ja') if text == get_help_center_title(link, 'en-us') else text
+	ja_link = link.replace('/en-us/', '/ja/')
+
+	return '[%s](%s)' % (ja_text, ja_link)
 
 def translate_line_links(input_file, base_folder, line, has_toc_tree):
 	pos2 = line.find('](')
@@ -96,7 +105,7 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 	while pos2 != -1:
 		pos1 = line.rfind('[', 0, pos2)
 
-		if pos2 == -1:
+		if pos1 == -1:
 			return line
 
 		if pos1 > 0 and line[pos1-1] == '!':
@@ -122,7 +131,10 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 		if link.find('https://learn.liferay.com/') == 0:
 			if link.find('/en/') != -1 or link.find('/ja/') != -1:
 				ja_link = fix_learn_link(text, link)
-		elif link[0] == '.' and link[-3:] == '.md':
+		elif link.find('https://help.liferay.com/hc/') == 0:
+			if link.find('/en-us/') != -1 or link.find('/ja/') != -1:
+				ja_link = fix_help_center_link(text, link)
+		elif link[-3:] == '.md' and link.find('://') == -1:
 			ja_file = resolve_path(base_folder, link)
 
 			if not os.path.exists(ja_file):

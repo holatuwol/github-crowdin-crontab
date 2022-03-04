@@ -1,15 +1,10 @@
 #!/usr/bin/env python
 
-from inspect import getsourcefile
 from learn_util import *
 import json
 import os
 import requests
 import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
-
-from zendesk import get_zendesk_article
 
 def extract_string_value(line):
 	if line.find('`') != -1:
@@ -57,22 +52,6 @@ def extract_title(landing_file_name, html_file_name):
 
 	return file_path, None
 
-def get_help_center_title(request_url):
-	if request_url.find('https://help.liferay.com/') != 0 or request_url.find('/en-us/') == -1:
-		return None, None
-
-	pos0 = request_url.rfind('/') + 1
-	pos1 = request_url.find('-', pos0)
-
-	article_id = request_url[pos0:pos1]
-
-	article = get_zendesk_article('help.liferay.com', article_id, 'ja')
-
-	if article is None:
-		return None, None
-
-	return article['html_url'], '%s (ヘルプセンター)' % article['title']
-
 def update_landing(file_name):
 	new_content = []
 
@@ -99,7 +78,7 @@ def update_landing(file_name):
 			relative_path = extract_string_value(path_line)
 
 			if relative_path.find('https://') == 0:
-				absolute_path, new_title = get_help_center_title(relative_path)
+				absolute_path, new_title = get_help_center_title(relative_path, 'ja')
 				new_content.append(name_line if new_title is None else set_string_value(name_line, new_title))
 				new_content.append(path_line if absolute_path is None else set_string_value(path_line, absolute_path))
 				name_line = None

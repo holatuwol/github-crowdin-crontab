@@ -1,4 +1,52 @@
+from inspect import getsourcefile
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+
+from zendesk import get_zendesk_article, zendesk_get_request
+
+cached_titles = {}
+
+def get_help_center_title(request_url, language_id):
+	key = request_url + '::' + language_id
+
+	if key in cached_titles:
+		return cached_titles[key]
+
+	if request_url.find('https://help.liferay.com/hc/') != 0:
+		return None, None
+
+	pos0 = request_url.rfind('/') + 1
+	pos1 = request_url.find('-', pos0)
+
+	if pos1 == -1:
+		pos1 = len(request_url)
+
+	if request_url.find('#') != -1:
+		request_url = request_url[:request_url.find('#')]
+
+	if request_url.find('/articles/') != -1:
+		article_id = request_url[pos0:pos1]
+		article = get_zendesk_article('help.liferay.com', article_id, language_id)
+
+		if article is None:
+			cached_titles[key] = (None, None)
+		else:
+			cached_titles[key] = (article['html_url'], '%s (ヘルプセンター)' % article['title'])
+	elif request_url.find('/sections/') != -1:
+		section_id = request_url[pos0:pos1]
+
+		translations = zendesk_get_request('help.liferay.com', '/help_center/sections/%s/translations/%s.json' % (section_id, language_id), 'translation')
+
+		if len(translations) == 0:
+			cached_titles[key] = (None, None)
+		else:
+			cached_titles[key] = (translations[0]['html_url'], translations[0]['title'])
+	else:
+		cached_titles[key] = (None, None)
+
+	return cached_titles[key]
 
 def resolve_path(folder, file):
 	while folder[-1] == '/':
