@@ -1,9 +1,14 @@
+from inspect import getsourcefile
 from learn_util import *
 import os
 import requests
 import string
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+
+import git
 
 def fix_learn_code(line):
 	pos0 = line.find('https://learn.liferay.com/')
@@ -254,5 +259,12 @@ def translate_links(input_file):
 	with open(input_file, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(fixed_lines))
 
-for file in sys.argv[1:]:
+files = []
+
+if len(sys.argv) == 1:
+	files = git.ls_files('*.md').split('\n')
+else:
+	files = sys.argv[1:]
+
+for file in files:
 	translate_links(file)
