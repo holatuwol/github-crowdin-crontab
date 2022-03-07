@@ -23,7 +23,7 @@ def get_markdown_parser(max_heading_level):
 
 	return parser
 
-def is_matching_heading(line):
+def is_matching_heading(line, max_heading_level):
 	if line[0] != '#':
 		return False
 
@@ -109,7 +109,7 @@ def update_header_ids(ja_file, max_heading_level):
 
 			in_directive = False
 
-		if is_matching_heading(line) and header_index < len(header_anchors):
+		if is_matching_heading(line, max_heading_level) and header_index < len(header_anchors):
 			translated_header_anchors.append(line)
 
 			if len(fixed_lines) < 2:
