@@ -208,8 +208,8 @@ def extract_title_from_md(file_path):
 	title = None
 
 	for line in lines:
-		if line.find('# ') == 0:
-			title = line[2:].strip()
+		if line.find('#') == 0 and line.find(' ') != -1:
+			title = line[line.find(' ')+1:].strip()
 			break
 
 	if title is None:
