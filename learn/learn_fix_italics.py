@@ -230,5 +230,12 @@ def fix_italics(input_file):
 	with open(input_file, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(fixed_lines))
 
-for file in sys.argv[1:]:
+files = []
+
+if len(sys.argv) == 1:
+	files = git.ls_files('*.md').split('\n')
+else:
+	files = sys.argv[1:]
+
+for file in files:
 	fix_italics(file)

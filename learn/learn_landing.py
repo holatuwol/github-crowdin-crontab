@@ -108,5 +108,12 @@ def update_landing(file_name):
 	with open(file_name, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(new_content))
 
-for file_name in sys.argv[1:]:
-	update_landing(file_name)
+files = []
+
+if len(sys.argv) == 1:
+	files = git.ls_files('landing.html', '**/landing.html').split('\n')
+else:
+	files = sys.argv[1:]
+
+for file in files:
+	update_landing(file)

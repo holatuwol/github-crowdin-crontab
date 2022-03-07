@@ -1,5 +1,10 @@
+from inspect import getsourcefile
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+
+import git
 
 def get_path(input_folder, link_file):
 	if link_file[0] != '/':
@@ -143,5 +148,12 @@ def fix_rst_blocks(input_file):
 	with open(input_file, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(fixed_lines))
 
-for file in sys.argv[1:]:
+files = []
+
+if len(sys.argv) == 1:
+	files = git.ls_files('*.md').split('\n')
+else:
+	files = sys.argv[1:]
+
+for file in files:
 	fix_rst_blocks(file)

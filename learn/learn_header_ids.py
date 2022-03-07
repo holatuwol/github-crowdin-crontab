@@ -148,7 +148,7 @@ def update_header_ids(ja_file, max_heading_level):
 files = []
 
 if len(sys.argv) == 1:
-	files = git.ls_files('--', '*.md').split('\n')
+	files = git.ls_files('*.md').split('\n')
 else:
 	files = sys.argv[1:]
 
