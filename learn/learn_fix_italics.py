@@ -1,4 +1,5 @@
 from inspect import getsourcefile
+import os
 import string
 import subprocess
 import sys

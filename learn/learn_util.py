@@ -17,14 +17,17 @@ def get_help_center_title(request_url, language_id):
 	if request_url.find('https://help.liferay.com/hc/') != 0:
 		return None, None
 
+	if request_url.find('#') != -1:
+		request_url = request_url[:request_url.find('#')]
+
+	if request_url.find('?') != -1:
+		request_url = request_url[:request_url.find('?')]
+
 	pos0 = request_url.rfind('/') + 1
 	pos1 = request_url.find('-', pos0)
 
 	if pos1 == -1:
 		pos1 = len(request_url)
-
-	if request_url.find('#') != -1:
-		request_url = request_url[:request_url.find('#')]
 
 	if request_url.find('/articles/') != -1:
 		article_id = request_url[pos0:pos1]

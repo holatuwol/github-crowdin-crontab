@@ -17,7 +17,7 @@ def get_path(input_folder, link_file):
 
 	return os.path.join(folder, link_file[1:])
 
-def switch_rst_doclink(code_block_type, input_folder, line):
+def switch_rst_doclink(input_file, code_block_type, input_folder, line):
 	x = line.find(':doc:`')
 
 	while x != -1:
@@ -31,7 +31,7 @@ def switch_rst_doclink(code_block_type, input_folder, line):
 			with open(link_file_path, 'r') as f:
 				title = f.readlines()[0][1:].strip()
 		else:
-			print(link_file)
+			print('[%s] %s' % (input_file, link_file))
 			title = link_file
 
 		line = '%s[%s](%s)%s' % (line[:x], title, link_file, line[y+1:])
@@ -40,7 +40,7 @@ def switch_rst_doclink(code_block_type, input_folder, line):
 
 	return line
 
-def switch_rst_links(code_block_type, line):
+def switch_rst_links(input_file, code_block_type, line):
 	if len(code_block_type) <= 3 or code_block_type[3] != '{':
 		return line
 
@@ -50,7 +50,7 @@ def switch_rst_links(code_block_type, line):
 		w = line.rfind('`', 0, y)
 
 		if w == -1:
-			print(line)
+			print('[%s] %s' % (input_file, line))
 			return line
 
 		x = line.find('<', w)
@@ -61,7 +61,7 @@ def switch_rst_links(code_block_type, line):
 
 	return line
 
-def switch_rst_inline_code(code_block_type, line):
+def switch_rst_inline_code(input_file, code_block_type, line):
 	if len(code_block_type) <= 3 or code_block_type[3] != '{':
 		return line
 
@@ -71,6 +71,7 @@ def switch_rst_inline_code(code_block_type, line):
 		y = line.find('``', x + 2)
 
 		if y == -1:
+			print('[%s] %s' % (input_file, line))
 			return line
 
 		line = line[:x] + line[x+1:y+1] + line[y+2:]
@@ -108,8 +109,8 @@ def fix_rst_blocks(input_file):
 		if in_code_block:
 			fixed_line = line
 
-			fixed_line = switch_rst_links(code_block_type, line)
-			fixed_line = switch_rst_inline_code(code_block_type, fixed_line)
+			fixed_line = switch_rst_links(input_file, code_block_type, line)
+			fixed_line = switch_rst_inline_code(input_file, code_block_type, fixed_line)
 
 			if line != fixed_line:
 				malformed_lines.append(line)
@@ -135,7 +136,7 @@ def fix_rst_blocks(input_file):
 
 		fixed_line = line
 
-		fixed_line = switch_rst_doclink(code_block_type, input_folder, line)
+		fixed_line = switch_rst_doclink(input_file, code_block_type, input_folder, line)
 
 		if line != fixed_line:
 			malformed_lines.append(line)
