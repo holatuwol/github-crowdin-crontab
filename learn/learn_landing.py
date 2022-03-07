@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 
+from inspect import getsourcefile
 from learn_util import *
 import json
 import os
 import requests
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+
+import git
 
 def extract_string_value(line):
 	if line.find('`') != -1:

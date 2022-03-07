@@ -1,7 +1,12 @@
+from inspect import getsourcefile
 import string
 import subprocess
 import sys
 import urllib.parse
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+
+import git
 
 valid_punctuation =  '* []()［］（）「」'
 
