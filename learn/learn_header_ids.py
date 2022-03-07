@@ -1,10 +1,13 @@
+from inspect import getsourcefile
 from myst_parser.main import MdParserConfig, default_parser
 import os
 import sys
 
-max_heading_level = 2
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
 
-def get_markdown_parser():
+import git
+
+def get_markdown_parser(max_heading_level):
 	# Copied from https://github.com/executablebooks/MyST-Parser/blob/v0.16.1/myst_parser/cli.py
 
 	config = MdParserConfig(renderer="html", heading_anchors=max_heading_level)
@@ -33,8 +36,8 @@ def is_matching_heading(line):
 def get_header_anchor(line):
 	return '<a name="%s" />\n' % line.split('"')[1]
 
-def update_header_ids(ja_file):
-	parser = get_markdown_parser()
+def update_header_ids(ja_file, max_heading_level):
+	parser = get_markdown_parser(max_heading_level)
 
 	en_file = os.path.join(os.getcwd(), ja_file).replace('/ja/', '/en/')
 
@@ -131,14 +134,24 @@ def update_header_ids(ja_file):
 		previous_line = line
 
 	if not updated_file:
-		return
+		return True
 
 	if header_index != len(header_anchors):
 		print('mismatched header count:', header_index, len(header_anchors), ja_file)
-		return
+		return False
 
 	with open(ja_file, 'w', encoding = 'utf-8') as f:
 		f.write(''.join(fixed_lines))
 
-for file in sys.argv[1:]:
-	update_header_ids(file)
+	return True
+
+files = []
+
+if len(sys.argv) == 1:
+	files = git.ls_files('--', '*.md').split('\n')
+else:
+	files = sys.argv[1:]
+
+for file in files:
+	if not update_header_ids(file, 3):
+		update_header_ids(file, 2)
