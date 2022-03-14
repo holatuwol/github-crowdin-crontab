@@ -29,7 +29,11 @@ def fix_learn_code(line):
 
 	return line
 
+missing_translations = set()
+
 def fix_learn_link(text, link):
+	global missing_translations
+
 	if link.find('https://learn.liferay.com/') != 0:
 		return link
 
@@ -43,9 +47,13 @@ def fix_learn_link(text, link):
 	if request_url.find('/ja/') != -1:
 		request_url = request_url.replace('/ja/', '/en/')
 
+	if request_url in missing_translations:
+		return '[%s](%s)' % (text, link) if text is not None else link
+
 	r = requests.get(request_url)
 
 	if r.status_code != 200:
+		missing_translations.add(request_url)
 		print('broken link:', request_url)
 		return '[%s](%s)' % (text, link) if text is not None else link
 
@@ -55,11 +63,10 @@ def fix_learn_link(text, link):
 		r.encoding = r.apparent_encoding
 		content_en = r.text
 
-	request_url = request_url.replace('/en/', '/ja/')
-
-	r = requests.get(request_url)
+	r = requests.get(request_url.replace('/en/', '/ja/'))
 
 	if r.status_code != 200:
+		missing_translations.add(request_url)
 		print('missing translation:', request_url)
 		return '[%s](%s)' % (text, link) if text is not None else link
 
