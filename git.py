@@ -34,6 +34,18 @@ def commit(*args, **kwargs):
 def config(*args, **kwargs):
     return _git('config', args, **kwargs)
 
+def config_prompt(key, label):
+    value = config(key)
+
+    if value is not None and value != '':
+        return value
+
+    value = input('%s: ' % label)
+
+    config('--global', key, value)
+
+    return value
+
 def describe(*args, **kwargs):
     return _git('describe', args, **kwargs)
 

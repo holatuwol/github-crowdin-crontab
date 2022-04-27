@@ -50,8 +50,8 @@ def crowdin_http_request(repository, path, method, **data):
         return crowdin_http_request(repository, path, method, **data)
     
     login_data = {
-        'email_or_login': git.config('crowdin.login'),
-        'password': git.config('crowdin.password'),
+        'email_or_login': git.config_prompt('crowdin.login', 'login'),
+        'password': git.config_prompt('crowdin.password', 'password'),
         'hash': 'files',
         'continue': url,
         'locale': 'en',
@@ -87,8 +87,8 @@ def crowdin_request(repository, api_path, request_type='GET', data=None, files=N
 
     if repository is None:
         get_data = {
-            'login': git.config('crowdin.account-login'),
-            'account-key': git.config('crowdin.account-key-v1')
+            'login': git.config_prompt('crowdin.account-login', 'API login'),
+            'account-key': git.config_prompt('crowdin.account-key-v1', 'API key v1')
         }
     else:
         get_data = {
