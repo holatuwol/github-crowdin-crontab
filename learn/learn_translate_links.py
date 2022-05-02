@@ -161,7 +161,7 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 			if os.path.exists(en_file):
 				en_title = extract_title_from_md(en_file)
 
-				if text != en_title:
+				if text.strip().lower() != en_title.strip().lower():
 					pos2 = line.find('](', pos3)
 					continue
 			elif not has_toc_tree:
