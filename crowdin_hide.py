@@ -219,7 +219,11 @@ def hide_code_translations(repository, source_language, target_language, file_na
 def process_code_translations(project_id, project_name, project_folder, source_language, target_language, force=False):
     status_code, response_text = crowdin_request(None, '/account/get-projects', 'GET', {'json': 'true'})
 
-    projects = json.loads(response_text)['projects']
+    try:
+        projects = json.loads(response_text)['projects']
+    except:
+        print(response_text)
+        raise e
 
     project_api_keys = [project['key'] for project in projects if project['identifier'] == project_name]
 
