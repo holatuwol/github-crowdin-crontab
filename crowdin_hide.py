@@ -223,7 +223,7 @@ def process_code_translations(project_id, project_name, project_folder, source_l
         projects = json.loads(response_text)['projects']
     except:
         print(response_text)
-        raise e
+        raise
 
     project_api_keys = [project['key'] for project in projects if project['identifier'] == project_name]
 

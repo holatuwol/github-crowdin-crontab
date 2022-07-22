@@ -7,9 +7,10 @@ from scrape_liferay import authenticate, session
 import urllib
 
 csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
+invalid_session = False
 
 def crowdin_http_request(repository, path, method, **data):
-    global csrf_token
+    global csrf_token, invalid_session
 
     if method == 'GET':
         get_data = { key: value for key, value in data.items() }
@@ -35,8 +36,13 @@ def crowdin_http_request(repository, path, method, **data):
             return r.content
     except:
         pass
-    
-    logging.info('Session timed out, refreshing session')
+
+    if invalid_session:
+        git.config('--global', '--unset', 'crowdin.login')
+        git.config('--global', '--unset', 'crowdin.password')
+    else:
+        logging.info('Session timed out, refreshing session')
+        invalid_session = True
 
     continue_url = 'https://crowdin.com/%s/settings' % repository.crowdin.project_name
     login_url = 'https://accounts.crowdin.com/login'
@@ -50,8 +56,8 @@ def crowdin_http_request(repository, path, method, **data):
         return crowdin_http_request(repository, path, method, **data)
     
     login_data = {
-        'email_or_login': git.config_prompt('crowdin.login', 'login'),
-        'password': git.config_prompt('crowdin.password', 'password'),
+        'email_or_login': git.config_prompt('crowdin.login', 'https://crowdin.com/settings#account "Email"'),
+        'password': git.config_prompt('crowdin.password', 'https://crowdin.com/settings#password "Password"'),
         'hash': 'files',
         'continue': url,
         'locale': 'en',
@@ -87,14 +93,14 @@ def crowdin_request(repository, api_path, request_type='GET', data=None, files=N
 
     if repository is None:
         get_data = {
-            'login': git.config_prompt('crowdin.account-login', 'API login'),
-            'account-key': git.config_prompt('crowdin.account-key-v1', 'API key v1')
+            'login': git.config_prompt('crowdin.account-login', 'https://crowdin.com/settings#account "Username"'),
+            'account-key': git.config_prompt('crowdin.account-key-v1', 'https://crowdin.com/settings#api-key "Account API key"')
         }
     else:
         get_data = {
             'key': repository.crowdin.api_key
         }
-    
+
     if request_type == 'GET':
         if data is not None:
             get_data.update(data)
@@ -106,6 +112,14 @@ def crowdin_request(repository, api_path, request_type='GET', data=None, files=N
         request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
 
         r = requests.post(request_url, data=data, files=files, headers=headers)
+
+    if r.status_code == 401 or r.status_code == 404:
+        logging.error('Invalid user name or password')
+
+        git.config('--global', '--unset', 'crowdin.account-login')
+        git.config('--global', '--unset', 'crowdin.account-key-v1')
+
+        return crowdin_request(repository, api_path, request_type, data, files)
 
     if r.status_code < 200 or r.status_code >= 400:
         logging.error('HTTP Error: %d' % r.status_code)
