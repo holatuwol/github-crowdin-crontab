@@ -4,10 +4,6 @@ if [ -z "$@" ]; then
 	git ls-files -- '*.md' | xargs sed -i.bak 's@\]\*\([^0-9A-Za-z[:space:][:punct:]]\)@\]* \1@g'
 	git ls-files -- '*.md' | xargs sed -i.bak 's@\([^0-9A-Za-z[:space:]]\)<!--@\1 <!--@g'
 	git ls-files -- '*.md' | xargs sed -i.bak 's@-->\([^0-9A-Za-z[:space:]]\)@--> \1@g'
-
-	while [ "" != "$(git ls-files -- '*.md' | xargs grep -F '***')" ]; do
-		git ls-files -- '*.md' | xargs sed -i.bak 's@\*\*\*@**@g'
-	done
 else
 	sed -i.bak 's@\]\*\([^0-9A-Za-z[:space:][:punct:]]\)@\]* \1@g' $@
 	sed -i.bak 's@\([^0-9A-Za-z[:space:]]\)<!--@\1 <!--@g' $@
