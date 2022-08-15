@@ -1,14 +1,19 @@
 from collections import defaultdict
-from crowdin_sync import update_repository
 from datetime import datetime
-from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
-from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
-import git
+import inspect
 import json
 import logging
 import math
 import os
 import pandas as pd
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))) 
+
+from crowdin_sync import update_repository
+from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
+from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
+import git
 from repository import initial_dir
 from scrape_liferay import authenticate, session
 
@@ -155,7 +160,7 @@ def get_new_articles(domain):
     all_articles = {}
 
     try:
-        with open('%s/all_articles_%s.json' % (initial_dir, domain), 'r') as f:
+        with open('%s/zendesk/all_articles_%s.json' % (initial_dir, domain), 'r') as f:
             all_articles = json.load(f)
     except:
         pass
@@ -174,7 +179,7 @@ def get_new_articles(domain):
 
     all_articles.update(new_articles)
 
-    with open('%s/all_articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/all_articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(all_articles, f)
 
     return all_articles
@@ -199,7 +204,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language):
     articles = {}
 
     try:
-        with open('%s/articles_%s.json' % (initial_dir, domain), 'r') as f:
+        with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'r') as f:
             articles = json.load(f)
     except:
         pass
@@ -236,7 +241,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language):
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
-    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     os.chdir(old_dir)
@@ -345,7 +350,7 @@ def copy_zendesk_to_crowdin(repository, domain, source_language, target_language
 
     sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles, refresh_paths)
 
-    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     return refresh_articles
@@ -482,8 +487,8 @@ def save_article_metadata(domain, repository, target_language, articles, article
 def get_categories(domain, target_language):
     categories = {}
 
-    if os.path.exists('%s/categories_%s.json' % (initial_dir, domain)):
-        with open('%s/categories_%s.json' % (initial_dir, domain), 'r') as f:
+    if os.path.exists('%s/zendesk/categories_%s.json' % (initial_dir, domain)):
+        with open('%s/zendesk/categories_%s.json' % (initial_dir, domain), 'r') as f:
             categories = json.load(f)
 
     category_list = zendesk_get_request(domain, '/help_center/en-us/categories.json', 'categories')
@@ -501,7 +506,7 @@ def get_categories(domain, target_language):
 
         categories[category_id] = category
 
-    with open('%s/categories_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/categories_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(categories, f)
 
     return categories
@@ -509,8 +514,8 @@ def get_categories(domain, target_language):
 def get_sections(domain, target_language):
     sections = {}
 
-    if os.path.exists('%s/sections_%s.json' % (initial_dir, domain)):
-        with open('%s/sections_%s.json' % (initial_dir, domain), 'r') as f:
+    if os.path.exists('%s/zendesk/sections_%s.json' % (initial_dir, domain)):
+        with open('%s/zendesk/sections_%s.json' % (initial_dir, domain), 'r') as f:
             sections = json.load(f)
 
     section_list = zendesk_get_request(domain, '/help_center/en-us/sections.json', 'sections')
@@ -528,7 +533,7 @@ def get_sections(domain, target_language):
 
         sections[section_id] = section
 
-    with open('%s/sections_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/sections_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(sections, f)
 
     return sections
@@ -569,7 +574,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     for article_id in candidate_article_ids:
         update_translated_at(domain, article_id, source_language, target_language, articles[article_id], articles, section_paths)
 
-    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     # Third pass: assume metadata is complete, check what is out of date
@@ -582,7 +587,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
-    with open('%s/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
 
     refresh_paths = {
@@ -610,10 +615,10 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
 tracked_categories = []
 tracked_labels = []
 
-with open('%s/zendesk_tracked_categories.txt' % initial_dir, 'r') as f:
+with open('%s/zendesk/zendesk_tracked_categories.txt' % initial_dir, 'r') as f:
     tracked_categories = [line.strip() for line in f.readlines()]
 
-with open('%s/zendesk_tracked_labels.txt' % initial_dir, 'r') as f:
+with open('%s/zendesk/zendesk_tracked_labels.txt' % initial_dir, 'r') as f:
     tracked_labels = [line.strip() for line in f.readlines()]
 
 def is_tracked_article(article, source_language, section_paths):

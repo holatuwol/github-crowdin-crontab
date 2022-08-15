@@ -8,7 +8,7 @@ import pandas as pd
 from repository import get_repository, initial_dir
 import sys
 import time
-from zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin
+from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin
 
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
