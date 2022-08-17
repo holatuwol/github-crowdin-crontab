@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from crowdin_util import crowdin_http_request, crowdin_request, get_crowdin_file_info
+from crowdin_util import crowdin_http_request, get_crowdin_file_info
 import logging
 import json
 import os
@@ -217,22 +217,7 @@ def hide_code_translations(repository, source_language, target_language, file_na
     return has_suggestions
 
 def process_code_translations(project_id, project_name, project_folder, source_language, target_language, force=False):
-    status_code, response_text = crowdin_request(None, '/account/get-projects', 'GET', {'json': 'true'})
-
-    try:
-        projects = json.loads(response_text)['projects']
-    except:
-        print(response_text)
-        raise
-
-    project_api_keys = [project['key'] for project in projects if project['identifier'] == project_name]
-
-    if len(project_api_keys) == 0:
-        project_api_key = None
-    else:
-        project_api_key = project_api_keys[0]
-
-    repository = TranslationRepository(None, CrowdInRepository(project_id, project_name, project_api_key, project_folder, False, False))
+    repository = TranslationRepository(None, CrowdInRepository(project_id, project_name, None, project_folder, False, False))
 
     file_info = get_crowdin_file_info(repository, target_language)
 

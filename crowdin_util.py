@@ -1,6 +1,8 @@
 from bs4 import BeautifulSoup
 import git
+import json
 import logging
+import os
 import random
 import requests
 from scrape_liferay import authenticate, session
@@ -80,91 +82,163 @@ def crowdin_http_request(repository, path, method, **data):
     return crowdin_http_request(repository, path, method, **data)
 
 crowdin_base_url = 'https://api.crowdin.com/api'
+user_id = None
 
-def crowdin_request(repository, api_path, request_type='GET', data=None, files=None):
+def crowdin_request(api_path, method='GET', data=None, files=None):
+    global user_id
+
+    if data is None:
+        data = {}
+
+    offset = data['offset'] if 'offset' in data else 0
+    limit = data['limit'] if 'limit' in data else 25
+
+    print('%s (offset=%d)' % (api_path, offset))
+
     headers = {
-        'user-agent': 'python'
+        'user-agent': 'python',
+        'authorization': 'Bearer %s' % git.config_prompt('crowdin.account-key-v2', 'https://crowdin.com/settings#api-key "Account API key"')
     }
 
-    if repository is None:
-        request_url = crowdin_base_url + api_path
+    if user_id is None and api_path != '/user':
+        status_code, response_data = crowdin_request('/user', 'GET', {})
+        user_id = response_data['id']
+
+    request_url = crowdin_base_url + '/v2' + api_path
+
+    if method == 'GET':
+        request_url = request_url + '?' + '&'.join([key + '=' + str(value) for key, value in data.items()])
+
+        r = requests.get(request_url, headers=headers)
     else:
-        request_url = crowdin_base_url + '/project/' + repository.crowdin.project_name + api_path
+        r = requests.post(request_url, json=data, headers=headers)
 
-    if repository is None:
-        get_data = {
-            'login': git.config_prompt('crowdin.account-login', 'https://crowdin.com/settings#account "Username"'),
-            'account-key': git.config_prompt('crowdin.account-key-v1', 'https://crowdin.com/settings#api-key "Account API key"')
-        }
-    else:
-        get_data = {
-            'key': repository.crowdin.api_key
-        }
-
-    if request_type == 'GET':
-        if data is not None:
-            get_data.update(data)
-            
-        request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
-
-        r = requests.get(request_url, data=get_data, headers=headers)
-    else:
-        request_url = request_url + '?' + '&'.join([key + '=' + value for key, value in get_data.items()])
-
-        r = requests.post(request_url, data=data, files=files, headers=headers)
-
-    if r.status_code == 401 or r.status_code == 404:
+    if r.status_code == 401:
         logging.error('Invalid user name or password')
 
-        git.config('--global', '--unset', 'crowdin.account-login')
-        git.config('--global', '--unset', 'crowdin.account-key-v1')
+        git.config('--global', '--unset', 'crowdin.account-key-v2')
 
-        return crowdin_request(repository, api_path, request_type, data, files)
+        return crowdin_request(api_path, method, data, files)
 
-    if r.status_code < 200 or r.status_code >= 400:
+    if r.status_code >= 400:
+        logging.error('HTTP Error: %s' % r.content)
+        return (r.status_code, None)
+
+    if r.status_code < 200:
         logging.error('HTTP Error: %d' % r.status_code)
         return (r.status_code, None)
 
-    return (r.status_code, r.content)
+    response = json.loads(r.content)
+    response_data = response['data']
 
-def extract_crowdin_file_info(repository, files_element, current_path, file_info):
-    for item in files_element.children:
-        if item.name != 'item':
-            continue
+    if method != 'GET' or 'pagination' not in response or offset != 0:
+        return (r.status_code, response_data)
 
-        item_name = item.find('name').text
-        item_node_type = item.find('node_type').text
+    status_code = r.status_code
 
-        item_path = current_path + '/' + item_name if current_path is not None else item_name
+    results = []
+    results.extend(response_data)
 
-        if item_path.find(repository.crowdin.dest_folder) == 0:
-            file_info[item_path] = {
-                'phrases': int(item.find('phrases').text),
-                'translated': int(item.find('translated').text),
-                'approved': int(item.find('approved').text)
-            }
+    while len(response_data) == limit:
+        offset = offset + limit
+        data['offset'] = offset
+        data['limit'] = limit
 
-            if item_node_type == 'file':
-                file_info[item_path]['id'] = item.find('id').text
+        status_code, response_data = crowdin_request(api_path, method, data, files)
+        results.extend(response_data)
 
-        if item_node_type != 'file':
-            extract_crowdin_file_info(repository, item.find('files'), item_path, file_info)
+    return (status_code, results)
 
-def get_crowdin_file_info(repository, target_language):
-    if target_language.find('-') != -1:
-        target_language = target_language[:target_language.find('-')]
+def upload_file_to_crowdin_storage(file_path):
+    global user_id
 
-    data = {
-        'language': target_language
+    headers = {
+        'user-agent': 'python',
+        'content-type': 'application/octet-stream',
+        'Crowdin-API-FileName': os.path.basename(file_path),
+        'authorization': 'Bearer %s' % git.config_prompt('crowdin.account-key-v2', 'https://crowdin.com/settings#api-key "Account API key"')
     }
 
-    status_code, response_content = crowdin_request(
-        repository, '/language-status', 'POST', data)
+    if user_id is None:
+        status_code, response_data = crowdin_request('/user', 'GET', {})
+        user_id = response_data['id']
+
+    request_url = crowdin_base_url + '/v2/storages'
+
+    with open(file_path, 'rb') as f:
+        r = requests.post(request_url, data=f.read(), headers=headers)
+
+    if r.status_code == 401:
+        logging.error('Invalid user name or password')
+
+        git.config('--global', '--unset', 'crowdin.account-key-v2')
+
+        return crowdin_request(api_path, 'GET', {}, files)
+
+    if r.status_code >= 400:
+        logging.error('HTTP Error: %s' % r.content)
+        return (r.status_code, None)
+
+    if r.status_code < 200:
+        logging.error('HTTP Error: %d' % r.status_code)
+        return (r.status_code, None)
+
+    response = json.loads(r.content)
+    return (r.status_code, response['data'])
+
+def get_crowdin_file_info(repository, target_language):
+    if target_language[0:2] == 'ja':
+        target_language = 'ja'
 
     file_info = {}
+    item_paths = {}
 
-    if response_content is not None:
-        soup = BeautifulSoup(response_content, features='html.parser')
-        extract_crowdin_file_info(repository, soup.find('files'), None, file_info)
+    pagination_data = {
+        'offset': 0,
+        'limit': 500
+    }
+
+    # Fetch the list of files
+
+    api_path = '/projects/%s/files' % repository.crowdin.project_id
+
+    status_code, response_data = crowdin_request(
+        api_path, 'GET', pagination_data)
+
+    for item in response_data:
+        item_path = item['data']['path'][1:]
+        item_paths[item['data']['id']] = item_path
+
+        pos = item_path.find(repository.crowdin.dest_folder)
+
+        if pos == 0 or pos == 1:
+            file_info[item_path] = item['data']
+
+    # Fetch the list of translation statuses
+
+    pagination_data['offset'] = 0
+    api_path = '/projects/%s/languages/%s/progress' % (repository.crowdin.project_id, target_language)
+
+    while True:
+        status_code, response_data = crowdin_request(
+            api_path, 'GET', pagination_data)
+
+        for item in response_data:
+            key = item['data']['fileId']
+
+            if key not in item_paths:
+                continue
+
+            item_path = item_paths[key]
+
+            if item_path in file_info:
+                file_info[item_path]['phrases'] = item['data']['phrases']['total']
+                file_info[item_path]['translated'] = item['data']['phrases']['translated']
+                file_info[item_path]['approved'] = item['data']['phrases']['approved']
+
+        if len(response_data) < 500:
+            break
+
+        pagination_data['offset'] = pagination_data['offset'] + 500
 
     return file_info

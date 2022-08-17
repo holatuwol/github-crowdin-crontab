@@ -1,5 +1,5 @@
-from crowdin import crowdin_request, delete_translation_folder
 from crowdin_sync import update_repository
+from crowdin_util import crowdin_request
 from github import is_repository_accessible
 import json
 from liferay_learn import add_disclaimers_to_learn, copy_crowdin_to_learn, copy_learn_to_crowdin
@@ -8,18 +8,20 @@ import pandas as pd
 from repository import get_repository, initial_dir
 import sys
 import time
-from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin
+from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, translate_zendesk_on_crowdin
 
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
 
 def get_repositories(check_accessible=True):
-    status_code, response_text = crowdin_request(None, '/account/get-projects', 'GET', {'json': 'true'})
-
-    projects = json.loads(response_text)['projects']
+    projects = []
 
     repositories_df = pd.read_csv('%s/repositories.csv' % initial_dir, comment='#')
     repositories_df.fillna('', inplace=True)
+
+    for project_id in repositories_df['project_id'].unique():
+        status_code, response_data = crowdin_request('/projects/%s' % project_id, 'GET')
+        projects.append(response_data)
 
     repositories = [get_repository(projects, **x) for x in repositories_df.to_dict('records')]
 
@@ -47,6 +49,7 @@ def list_jobs():
 
         if repository.github.origin == 'holatuwol/zendesk-articles' or repository.github.origin == 'holatuwol/zendesk-articles-ja':
             print('  python %s %s %s crowdin' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s translate' % (sys.argv[0], git_repository, git_folder))
             print('  python %s %s %s zendesk' % (sys.argv[0], git_repository, git_folder))
         else:
             print('  python %s %s %s upload' % (sys.argv[0], git_repository, git_folder))
@@ -87,6 +90,8 @@ def execute_job(domain, git_repository, git_folder, direction):
     if repository.github.origin == 'holatuwol/zendesk-articles':
         if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'en-us', 'ja')
+        elif direction == 'translate':
+            translate_zendesk_on_crowdin(repository, domain, 'en-us', 'ja')
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'en-us', 'ja')
         else:
@@ -94,6 +99,8 @@ def execute_job(domain, git_repository, git_folder, direction):
     elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
         if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'ja', 'en-us')
+        elif direction == 'translate':
+            translate_zendesk_on_crowdin(repository, domain, 'ja', 'en-us')
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'ja', 'en-us')
         else:

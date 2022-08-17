@@ -57,7 +57,7 @@ def get_repository(projects, git_repository, git_branch, git_folder, project_id,
     else:
         upstream = upstream_url.split(':')[1][:-4]
 
-    project_api_keys = [project['key'] for project in projects if project['identifier'] == project_name]
+    project_api_keys = [project['key'] if 'key' in project else None for project in projects if project['identifier'] == project_name]
 
     if len(project_api_keys) == 0:
         project_api_key = None

@@ -184,7 +184,7 @@ def get_new_articles(domain):
 
     return all_articles
 
-def get_zendesk_articles(repository, domain, source_language, target_language):
+def get_zendesk_articles(repository, domain, source_language, target_language, update):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -211,21 +211,23 @@ def get_zendesk_articles(repository, domain, source_language, target_language):
 
     # Fetch all articles (let the delegated method handle update tracking)
 
-    all_articles = get_new_articles(domain)
     new_tracked_articles = {}
 
-    # Check for updates by comparing against our last set of tracked articles
+    if update:
+        all_articles = get_new_articles(domain)
 
-    for article_id, article in all_articles.items():
-        if article_id in articles:
-            if not is_tracked_article(article, source_language, section_paths):
-                del articles[article_id]
-            elif article['updated_at'] != articles[article_id]['updated_at']:
+        # Check for updates by comparing against our last set of tracked articles
+
+        for article_id, article in all_articles.items():
+            if article_id in articles:
+                if not is_tracked_article(article, source_language, section_paths):
+                    del articles[article_id]
+                elif article['updated_at'] != articles[article_id]['updated_at']:
+                    new_tracked_articles[article_id] = article
+            elif is_tracked_article(article, source_language, section_paths):
                 new_tracked_articles[article_id] = article
-        elif is_tracked_article(article, source_language, section_paths):
-            new_tracked_articles[article_id] = article
 
-    articles.update(new_tracked_articles)
+        articles.update(new_tracked_articles)
 
     logging.info('Found %d new/updated tracked articles' % len(new_tracked_articles))
 
@@ -307,7 +309,7 @@ def sync_articles(repository, domain, source_language, target_language, articles
     return file_info
 
 def copy_crowdin_to_zendesk(repository, domain, source_language, target_language):
-    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language)
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, False)
 
     old_dir = os.getcwd()
 
@@ -345,8 +347,11 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
     os.chdir(old_dir)
 
+def translate_zendesk_on_crowdin(repository, domain, source_language, target_language):
+    update_repository(repository, source_language, target_language, None, sync_sources=False)
+
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
-    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language)
+    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, True)
 
     sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles, refresh_paths)
 
@@ -538,7 +543,7 @@ def get_sections(domain, target_language):
 
     return sections
 
-def download_zendesk_articles(repository, domain, source_language, target_language):
+def download_zendesk_articles(repository, domain, source_language, target_language, update=False):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -546,7 +551,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     # Download current article information and rearrange articles that may have
     # moved categories.
 
-    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language)
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, update)
     article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
     for article_id, article_path in sorted(article_paths.items()):
