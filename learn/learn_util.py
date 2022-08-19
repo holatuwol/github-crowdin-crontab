@@ -2,7 +2,7 @@ from inspect import getsourcefile
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))), 'zendesk'))
 
 from zendesk import get_zendesk_article, zendesk_get_request
 
