@@ -180,7 +180,9 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
 
     api_path = '/projects/%s/files' % repository.crowdin.project_id
 
-    for file in upload_files:
+    for i, file in enumerate(upload_files):
+        logging.info('Uploading file %d/%d...' % (i, len(upload_files)))
+
         directory = get_directory(repository, os.path.dirname(file))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
