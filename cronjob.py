@@ -47,18 +47,24 @@ def list_jobs():
         git_repository = git_root[git_root.rfind('/')+1:]
         git_folder = repository.github.project_folder if repository.github.single_folder is None else repository.github.single_folder
 
-        if repository.github.origin == 'holatuwol/zendesk-articles' or repository.github.origin == 'holatuwol/zendesk-articles-ja':
-            print('  python %s %s %s crowdin' % (sys.argv[0], git_repository, git_folder))
-            print('  python %s %s %s translate' % (sys.argv[0], git_repository, git_folder))
-            print('  python %s %s %s zendesk' % (sys.argv[0], git_repository, git_folder))
+        if repository.github.origin == 'holatuwol/zendesk-articles':
+            for target_language in ['ja', 'ko']:
+                print('  python %s %s %s crowdin %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s %s translate %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s %s zendesk %s' % (sys.argv[0], git_repository, git_folder, target_language))
+        elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
+            print('  python %s %s %s crowdin en-us' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s translate en-us' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s zendesk en-us' % (sys.argv[0], git_repository, git_folder))
         else:
-            print('  python %s %s %s upload' % (sys.argv[0], git_repository, git_folder))
-            print('  python %s %s %s download' % (sys.argv[0], git_repository, git_folder))
+            for target_language in ['ja', 'ko']:
+                print('  python %s %s %s upload %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s %s download %s' % (sys.argv[0], git_repository, git_folder, target_language))
 
             if repository.github.upstream == 'liferay/liferay-learn':
-                print('  python %s %s %s disclaimer' % (sys.argv[0], git_repository, git_folder))
+                print('  python %s %s %s disclaimer %s' % (sys.argv[0], git_repository, git_folder, target_language))
 
-def execute_job(domain, git_repository, git_folder, direction):
+def execute_job(domain, git_repository, git_folder, direction, target_language):
     all_repositories = get_repositories(False)
 
     check_repositories = []
@@ -89,11 +95,11 @@ def execute_job(domain, git_repository, git_folder, direction):
 
     if repository.github.origin == 'holatuwol/zendesk-articles':
         if direction == 'crowdin':
-            copy_zendesk_to_crowdin(repository, domain, 'en-us', 'ja')
+            copy_zendesk_to_crowdin(repository, domain, 'en-us', target_language)
         elif direction == 'translate':
-            translate_zendesk_on_crowdin(repository, domain, 'en-us', 'ja')
+            translate_zendesk_on_crowdin(repository, domain, 'en-us', target_language)
         elif direction == 'zendesk':
-            copy_crowdin_to_zendesk(repository, domain, 'en-us', 'ja')
+            copy_crowdin_to_zendesk(repository, domain, 'en-us', target_language)
         else:
             print('invalid target of zendesk sync (crowdin, zendesk)')
     elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
@@ -109,11 +115,11 @@ def execute_job(domain, git_repository, git_folder, direction):
         print(repository)
 
         if direction == 'upload':
-            copy_learn_to_crowdin(repository, 'ja')
+            copy_learn_to_crowdin(repository, target_language)
         elif direction == 'download':
-            copy_crowdin_to_learn(repository, 'ja')
+            copy_crowdin_to_learn(repository, target_language)
         elif direction == 'disclaimer':
-            add_disclaimers_to_learn(repository, 'ja')
+            add_disclaimers_to_learn(repository, target_language)
         else:
             print('invalid target of learn sync (upload, download, disclaimer)')
     else:
@@ -132,7 +138,7 @@ def execute_job(domain, git_repository, git_folder, direction):
             update_repository(repository, sync_sources=sync_sources)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         list_jobs()
     else:
-        execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3])
+        execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

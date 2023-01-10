@@ -189,6 +189,8 @@ def upload_file_to_crowdin_storage(file_path):
 def get_crowdin_file_info(repository, target_language):
     if target_language[0:2] == 'ja':
         target_language = 'ja'
+    if target_language[0:2] == 'ko':
+        target_language = 'ko'
 
     file_info = {}
     item_paths = {}
@@ -206,13 +208,15 @@ def get_crowdin_file_info(repository, target_language):
         api_path, 'GET', pagination_data)
 
     for item in response_data:
-        item_path = item['data']['path'][1:]
+        item_path = item['data']['path'] if repository.crowdin.dest_folder[0] == '/' else item['data']['path'][1:]
         item_paths[item['data']['id']] = item_path
 
         pos = item_path.find(repository.crowdin.dest_folder)
 
-        if pos == 0 or pos == 1:
+        if pos == 0:
             file_info[item_path] = item['data']
+
+    logging.info('found %d/%d files matching destination folder %s' % (len(file_info), len(response_data), repository.crowdin.dest_folder))
 
     # Fetch the list of translation statuses
 

@@ -335,10 +335,11 @@ def pre_translate(repository, source_language, target_language, all_files, file_
     translate_with_machine(repository, target_language, 'tm', missing_phrases_files)
 
     # 245660 = DeepL
-    file_info = get_crowdin_file_info(repository, target_language)
-    missing_phrases_files = get_missing_phrases_files(repository, source_language, target_language, file_info)
-    logging.info('%s files need to be updated using DeepL' % len(missing_phrases_files))
-    translate_with_machine(repository, target_language, 245660, missing_phrases_files)
+    if target_language in ['en', 'ja']:
+        file_info = get_crowdin_file_info(repository, target_language)
+        missing_phrases_files = get_missing_phrases_files(repository, source_language, target_language, file_info)
+        logging.info('%s files need to be updated using DeepL' % len(missing_phrases_files))
+        translate_with_machine(repository, target_language, 245660, missing_phrases_files)
 
     # 213743 = Google Translate
     file_info = get_crowdin_file_info(repository, target_language)
