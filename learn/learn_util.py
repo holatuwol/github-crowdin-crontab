@@ -1,10 +1,16 @@
 from inspect import getsourcefile
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))), 'zendesk'))
 
 from zendesk import get_zendesk_article, zendesk_get_request
+
+language = re.search(r'/docs/[^/]+/[^/]+/([^/]+)/', os.getcwd())[1]
+language_path = '/%s/' % language
+
+learn_re = r'(https://learn.liferay.com/[^/]+/[^/]+)/([a-z][a-z])/'
 
 cached_titles = {}
 
@@ -88,10 +94,10 @@ def get_exact_file(source_file, target_file, relativize):
 	return None
 
 def get_basename_files(source_file, target_file, relativize=True):
-	if source_file.find('/en/') == -1 and source_file.find('/ja/') == -1:
+	if source_file.find('/en/') == -1 and source_file.find(language_path) == -1:
 		return []
 
-	if target_file.find('/en/') == -1 and target_file.find('/ja/') == -1:
+	if target_file.find('/en/') == -1 and target_file.find(language_path) == -1:
 		return []
 
 	if os.path.exists(target_file):
@@ -145,8 +151,8 @@ def get_basename_files(source_file, target_file, relativize=True):
 
 	return []
 
-def get_en_file(ja_file):
-	en_file = ja_file.replace('/ja/', '/en/')
+def get_en_file(tl_file):
+	en_file = tl_file.replace(language_path, '/en/')
 
 	if os.path.exists(en_file):
 		return en_file
@@ -156,7 +162,7 @@ def get_en_file(ja_file):
 	if len(basename_files) == 1:
 		return basename_files[0]
 
-	en_file = ja_file.replace('/ja/', '/en/').replace('-dxp', '')
+	en_file = tl_file.replace(language_path, '/en/').replace('-dxp', '')
 
 	if os.path.exists(en_file):
 		return en_file
@@ -166,7 +172,7 @@ def get_en_file(ja_file):
 	if len(basename_files) == 1:
 		return basename_files[0]
 
-	en_file = ja_file.replace('/ja/', '/en/').replace('-liferay-dxp', '')
+	en_file = tl_file.replace(language_path, '/en/').replace('-liferay-dxp', '')
 
 	if os.path.exists(en_file):
 		return en_file
@@ -176,7 +182,7 @@ def get_en_file(ja_file):
 	if len(basename_files) == 1:
 		return basename_files[0]
 
-	return ja_file.replace('/ja/', '/en/')
+	return tl_file.replace(language_path, '/en/')
 
 
 def get_full_title(file_path, title, content):

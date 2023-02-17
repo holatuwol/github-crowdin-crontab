@@ -1,6 +1,7 @@
 from inspect import getsourcefile
 from learn_util import *
 import os
+import re
 import requests
 import string
 import subprocess
@@ -44,8 +45,7 @@ def fix_learn_link(text, link):
 	if hash_index != -1:
 		request_url = request_url[:hash_index]
 
-	if request_url.find('/ja/') != -1:
-		request_url = request_url.replace('/ja/', '/en/')
+	request_url = re.sub(learn_re, '\\1/en/', request_url)
 
 	if request_url in missing_translations:
 		return '[%s](%s)' % (text, link) if text is not None else link
@@ -63,53 +63,53 @@ def fix_learn_link(text, link):
 		r.encoding = r.apparent_encoding
 		content_en = r.text
 
-	r = requests.get(request_url.replace('/en/', '/ja/'))
+	r = requests.get(request_url.replace('/en/', language_path))
 
 	if r.status_code != 200:
 		missing_translations.add(request_url)
-		print('missing translation:', request_url)
+		print('missing translation to %s: %s' % (language, request_url))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
-	link_ja = link.replace('/en/', '/ja/')
+	link_tl = link.replace('/en/', '/%s/' % language)
 
 	if content_en is None:
-		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
 
-	content_ja = None
+	content_tl = None
 
 	if '/html' in r.headers['content-type']:
 		r.encoding = r.apparent_encoding
-		content_ja = r.text
+		content_tl = r.text
 
 	pos0 = content_en.find('<h1>')
 
 	if pos0 == -1:
-		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
 
 	pos1 = content_en.find('<', pos0 + 4)
 
 	if text != content_en[pos0+4:pos1]:
-		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
 
-	pos0 = content_ja.find('<h1>')
+	pos0 = content_tl.find('<h1>')
 
 	if pos0 == -1:
-		return '[%s](%s)' % (text, link_ja) if text is not None else link_ja
+		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
 
-	pos1 = content_ja.find('<', pos0 + 4)
+	pos1 = content_tl.find('<', pos0 + 4)
 
-	text_ja = content_ja[pos0+4:pos1]
+	text_tl = content_tl[pos0+4:pos1]
 
-	return '[%s](%s)' % (text_ja, link_ja) if text is not None else link_ja
+	return '[%s](%s)' % (text_tl, link_tl) if text is not None else link_tl
 
 def fix_help_center_link(text, link):
 	if link.find('https://help.liferay.com/hc/') != 0:
 		return link
 
-	ja_text = get_help_center_title(link, 'ja') if text == get_help_center_title(link, 'en-us') else text
-	ja_link = link.replace('/en-us/', '/ja/')
+	tl_text = get_help_center_title(link, language) if text == get_help_center_title(link, 'en-us') else text
+	tl_link = link.replace('/en-us/', language_path)
 
-	return '[%s](%s)' % (ja_text, ja_link)
+	return '[%s](%s)' % (tl_text, tl_link)
 
 def translate_line_links(input_file, base_folder, line, has_toc_tree):
 	pos2 = line.find('](')
@@ -138,23 +138,21 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 			pos2 = line.find('](', pos3)
 			continue
 
-		ja_link = en_link
+		tl_link = en_link
 
 		if link.find('https://learn.liferay.com/') == 0:
-			if link.find('/en/') != -1 or link.find('/ja/') != -1:
-				ja_link = fix_learn_link(text, link)
+			tl_link = fix_learn_link(text, link)
 		elif link.find('https://help.liferay.com/hc/') == 0:
-			if link.find('/en-us/') != -1 or link.find('/ja/') != -1:
-				ja_link = fix_help_center_link(text, link)
+			tl_link = fix_help_center_link(text, link)
 		elif link[-3:] == '.md' and link.find('://') == -1:
-			ja_file = resolve_path(base_folder, link)
+			tl_file = resolve_path(base_folder, link)
 
-			if not os.path.exists(ja_file):
+			if not os.path.exists(tl_file):
 				#print('[%s] broken link: %s' % (input_file, link))
 				pos2 = line.find('](', pos3)
 				continue
 
-			en_file = get_en_file(ja_file)
+			en_file = get_en_file(tl_file)
 
 			en_title = None
 
@@ -168,18 +166,18 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 				pos2 = line.find('](', pos3)
 				continue
 
-			ja_title = extract_title_from_md(ja_file)
-			ja_link = '[%s](%s)' % (ja_title, link)
+			tl_title = extract_title_from_md(tl_file)
+			tl_link = '[%s](%s)' % (tl_title, link)
 
 		if pos1 > 0 and not line[pos1-1].isspace():
-			ja_link = ' ' + ja_link
+			tl_link = ' ' + tl_link
 
 		if pos3+1 < len(line) and not line[pos3+1].isspace():
-			ja_link = ja_link + ' '
+			tl_link = tl_link + ' '
 
-		line = line[0:pos1] + ja_link + line[pos3+1:]
+		line = line[0:pos1] + tl_link + line[pos3+1:]
 
-		pos2 = line.find('](', pos3 - len(en_link) + len(ja_link))
+		pos2 = line.find('](', pos3 - len(en_link) + len(tl_link))
 
 	return line
 
