@@ -96,7 +96,11 @@ def zendesk_get_request(domain, api_path, attribute_name, params=None):
 
         r = session.get(url)
 
-        api_result = json.loads(r.text)
+        try:
+            api_result = json.loads(r.text)
+        except:
+            print(r.text)
+            return None
 
         if attribute_name in api_result:
             if type(api_result[attribute_name]) == list:
