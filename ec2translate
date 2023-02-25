@@ -27,7 +27,7 @@ for config in $(git config --list | cut -d'=' -f 1); do
 done
 
 echo "Fetching new articles and preparing translations"
-docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py zendesk-articles en crowdin && python cronjob.py zendesk-articles en zendesk"
+docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py zendesk-articles en crowdin ja && python cronjob.py zendesk-articles en zendesk ja"
 
 echo "Cleaning up docker containers"
 docker stop crowdin

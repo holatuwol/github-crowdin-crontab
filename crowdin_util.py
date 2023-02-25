@@ -216,7 +216,7 @@ def get_crowdin_file_info(repository, target_language):
         if pos == 0:
             file_info[item_path] = item['data']
 
-    logging.info('found %d/%d files matching destination folder %s' % (len(file_info), len(response_data), repository.crowdin.dest_folder))
+    logging.info('Found %d/%d files matching destination folder %s' % (len(file_info), len(response_data), repository.crowdin.dest_folder))
 
     # Fetch the list of translation statuses
 

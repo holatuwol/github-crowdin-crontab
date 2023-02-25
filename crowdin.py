@@ -151,7 +151,9 @@ def get_directory(repository, path):
     parent_directory = directory_paths[parent_path]
     path_elements = path[len(parent_path)+1:].split('/')
     
-    for name in path_elements:
+    for i, name in enumerate(path_elements):
+        logging.info('Looking up subdirectory %s', '/'.join(path_elements[:i+1]))
+
         data = {
             'name': name,
             'directoryId': parent_directory['id']
@@ -181,9 +183,11 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     api_path = '/projects/%s/files' % repository.crowdin.project_id
 
     for i, file in enumerate(upload_files):
-        logging.info('Uploading file %d/%d...' % (i, len(upload_files)))
+        logging.info('Preparing to upload file %d/%d...' % (i, len(upload_files)))
 
         directory = get_directory(repository, os.path.dirname(file))
+
+        logging.info('Uploading file %d/%d...' % (i, len(upload_files)))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
 
@@ -192,6 +196,8 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
             'name': os.path.basename(file),
             'directoryId': directory['id']
         }
+
+        logging.info('Telling crowdin about uploaded file %d/%d...' % (i, len(upload_files)))
 
         crowdin_request(api_path, 'POST', data)
 
