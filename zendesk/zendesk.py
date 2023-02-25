@@ -188,7 +188,7 @@ def get_new_articles(domain):
 
     return all_articles
 
-def get_zendesk_articles(repository, domain, source_language, target_language, update):
+def get_zendesk_articles(repository, domain, source_language, target_language, fetch_update):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -217,7 +217,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, u
 
     new_tracked_articles = {}
 
-    if update:
+    if fetch_update:
         all_articles = get_new_articles(domain)
 
         # Check for updates by comparing against our last set of tracked articles
@@ -238,7 +238,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, u
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
-    if update:
+    if fetch_update:
         for article_id, article in sorted(articles.items()):
             if 'translated_at' not in article or target_language not in article['translated_at']:
                 update_translated_at(domain, article_id, source_language, target_language, article, articles, section_paths)
@@ -548,7 +548,7 @@ def get_sections(domain, target_language):
 
     return sections
 
-def download_zendesk_articles(repository, domain, source_language, target_language, update=False):
+def download_zendesk_articles(repository, domain, source_language, target_language, fetch_update=False):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
     assert(user['verified'])
@@ -556,7 +556,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     # Download current article information and rearrange articles that may have
     # moved categories.
 
-    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, update)
+    articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, fetch_update)
     article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
     for article_id, article_path in sorted(article_paths.items()):
@@ -576,13 +576,14 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     candidate_article_ids = [
         article_id
             for article_id, article in sorted(articles.items())
-                if requires_update(repository, domain, article, source_language, target_language, article_paths[article_id])
+                if requires_update(repository, domain, article, source_language, target_language, article_paths[article_id], fetch_update)
     ]
 
     # Second pass: anything that looks outdated, make sure its translation metadata is up-to-date
 
-    for article_id in candidate_article_ids:
-        update_translated_at(domain, article_id, source_language, target_language, articles[article_id], articles, section_paths)
+    if fetch_update:
+        for article_id in candidate_article_ids:
+            update_translated_at(domain, article_id, source_language, target_language, articles[article_id], articles, section_paths)
 
     with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
@@ -592,7 +593,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     refresh_articles = {
         article_id: articles[article_id]
             for article_id in candidate_article_ids
-                if requires_update(repository, domain, articles[article_id], source_language, target_language, article_paths[article_id])
+                if requires_update(repository, domain, articles[article_id], source_language, target_language, article_paths[article_id], fetch_update)
     }
 
     # Cache the articles on disk so we can work on them without having to go back to the API
@@ -673,7 +674,7 @@ def remove_nbsp(content):
 
     return new_content
 
-def requires_update(repository, domain, article, source_language, target_language, file):
+def requires_update(repository, domain, article, source_language, target_language, file, fetch_update):
     # check if machine translation is needed
 
     if target_language not in article['label_names']:
@@ -725,7 +726,7 @@ def requires_update(repository, domain, article, source_language, target_languag
 
     if old_content == new_content:
         missing_disclaimer = False
-    else:
+    elif fetch_update:
         mt_article = get_zendesk_article(domain, article['id'], target_language)
 
         if mt_article is None:
