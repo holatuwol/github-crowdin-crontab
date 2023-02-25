@@ -106,6 +106,8 @@ def fix_product_name_tokens(file):
 # Wrapper functions to upload sources and download translations.
 
 def get_directory(repository, path):
+    path = '/%s/%s' % (repository.crowdin.dest_folder, path)
+
     pagination_data = {
         'offset': 0,
         'limit': 500
