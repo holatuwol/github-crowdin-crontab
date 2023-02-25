@@ -355,7 +355,7 @@ def translate_zendesk_on_crowdin(repository, domain, source_language, target_lan
     update_repository(repository, source_language, target_language, None, sync_sources=False)
 
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
-    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, True)
+    articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, False)
 
     sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles, refresh_paths)
 

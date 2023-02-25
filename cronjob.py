@@ -8,7 +8,7 @@ import pandas as pd
 from repository import get_repository, initial_dir
 import sys
 import time
-from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, translate_zendesk_on_crowdin
+from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, download_zendesk_articles, translate_zendesk_on_crowdin
 
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
@@ -98,6 +98,8 @@ def execute_job(domain, git_repository, git_folder, direction, target_language):
             copy_zendesk_to_crowdin(repository, domain, 'en-us', target_language)
         elif direction == 'translate':
             translate_zendesk_on_crowdin(repository, domain, 'en-us', target_language)
+        elif direction == 'update':
+            download_zendesk_articles(repository, domain, source_language, target_language, True)
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'en-us', target_language)
         else:
