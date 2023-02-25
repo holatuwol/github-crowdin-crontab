@@ -238,12 +238,13 @@ def get_zendesk_articles(repository, domain, source_language, target_language, u
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
-    for article_id, article in sorted(articles.items()):
-        if 'translated_at' not in article or target_language not in article['translated_at']:
-            update_translated_at(domain, article_id, source_language, target_language, article, articles, section_paths)
+    if update:
+        for article_id, article in sorted(articles.items()):
+            if 'translated_at' not in article or target_language not in article['translated_at']:
+                update_translated_at(domain, article_id, source_language, target_language, article, articles, section_paths)
 
-    for article_id, article in sorted(new_tracked_articles.items()):
-        update_translated_at(domain, article_id, source_language, target_language, article, new_tracked_articles, section_paths)
+        for article_id, article in sorted(new_tracked_articles.items()):
+            update_translated_at(domain, article_id, source_language, target_language, article, new_tracked_articles, section_paths)
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
