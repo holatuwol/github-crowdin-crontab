@@ -51,10 +51,12 @@ def list_jobs():
             for target_language in ['ja', 'ko']:
                 print('  python %s %s %s crowdin %s' % (sys.argv[0], git_repository, git_folder, target_language))
                 print('  python %s %s %s translate %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s %s update %s' % (sys.argv[0], git_repository, git_folder, target_language))
                 print('  python %s %s %s zendesk %s' % (sys.argv[0], git_repository, git_folder, target_language))
         elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
             print('  python %s %s %s crowdin en-us' % (sys.argv[0], git_repository, git_folder))
             print('  python %s %s %s translate en-us' % (sys.argv[0], git_repository, git_folder))
+            print('  python %s %s %s update %s' % (sys.argv[0], git_repository, git_folder, target_language))
             print('  python %s %s %s zendesk en-us' % (sys.argv[0], git_repository, git_folder))
         else:
             for target_language in ['ja', 'ko']:
@@ -99,16 +101,18 @@ def execute_job(domain, git_repository, git_folder, direction, target_language):
         elif direction == 'translate':
             translate_zendesk_on_crowdin(repository, domain, 'en-us', target_language)
         elif direction == 'update':
-            download_zendesk_articles(repository, domain, source_language, target_language, True)
+            download_zendesk_articles(repository, domain, 'en-us', target_language, True)
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'en-us', target_language)
         else:
-            print('invalid target of zendesk sync (crowdin, zendesk)')
+            print('invalid target of zendesk sync (crowdin, translate, update, zendesk)')
     elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
         if direction == 'crowdin':
             copy_zendesk_to_crowdin(repository, domain, 'ja', 'en-us')
         elif direction == 'translate':
             translate_zendesk_on_crowdin(repository, domain, 'ja', 'en-us')
+        elif direction == 'update':
+            download_zendesk_articles(repository, domain, 'ja', 'en-us', True)
         elif direction == 'zendesk':
             copy_crowdin_to_zendesk(repository, domain, 'ja', 'en-us')
         else:
