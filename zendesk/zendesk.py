@@ -299,10 +299,7 @@ def sync_articles(repository, domain, source_language, target_language, articles
 
         git.add(target_file)
 
-    if refresh_articles is not None:
-        git.commit('-m', 'Translated new articles: %s' % datetime.now())
-    else:
-        git.commit('-m', 'Translated existing articles: %s' % datetime.now())
+    git.commit('-m', 'Translated existing articles: %s' % datetime.now())
 
     os.chdir(old_dir)
 
