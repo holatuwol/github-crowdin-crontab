@@ -255,15 +255,10 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
 
     return articles, new_tracked_articles, categories, sections, section_paths
 
-def sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles=None, refresh_paths=None):
-    if refresh_articles is not None:
-        logging.info('Updating translations for %d articles' % len(refresh_paths))
+def sync_articles(repository, domain, source_language, target_language, articles, article_paths):
+    logging.info('Downloading latest translations for %d articles' % len(article_paths))
 
-        new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(refresh_paths.values()), sync_sources=True)
-    else:
-        logging.info('Downloading latest translations for %d articles' % len(article_paths))
-
-        new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(article_paths.values()), sync_sources=False)
+    new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(article_paths.values()), sync_sources=False)
 
     old_dir = os.getcwd()
 
@@ -320,7 +315,7 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
     article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
-    file_info = sync_articles(repository, domain, source_language, target_language, articles, {})
+    file_info = sync_articles(repository, domain, source_language, target_language, articles)
 
     updated_source_files = [
         article_paths[article_id]
@@ -358,7 +353,7 @@ def translate_zendesk_on_crowdin(repository, domain, source_language, target_lan
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
     articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, False)
 
-    sync_articles(repository, domain, source_language, target_language, articles, article_paths, refresh_articles, refresh_paths)
+    sync_articles(repository, domain, source_language, target_language, articles, article_paths)
 
     with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)
