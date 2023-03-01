@@ -291,7 +291,12 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
     with ZipFile('temp.zip') as zipdata:
         for zipinfo in zipdata.infolist():
-            zipinfo.filename = zipinfo.filename[zipinfo.filename.find('/')+1:]
+            target_filename = zipinfo.filename[zipinfo.filename.find('/')+1:]
+
+            if len(target_filename) == 0:
+                continue
+
+            zipinfo.filename = target_filename
             zipdata.extract(zipinfo, repository.github.git_root)
 
     os.remove('temp.zip')
