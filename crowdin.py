@@ -214,6 +214,9 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     return before_upload, after_upload
 
 def crowdin_download_translations(repository, source_language, target_language, refresh_files, file_info):
+    if source_language.find('-') != -1:
+        source_language = source_language[:source_language.find('-')]
+
     if target_language.find('-') != -1:
         target_language = target_language[:target_language.find('-')]
 
@@ -283,22 +286,26 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
     r = requests.get(response_data['url'])
 
-    logging.info('Downloading build from %s' % response_data['url'])
+    export_file_name = 'export-%f.zip' % datetime.utcnow().timestamp()
 
-    export_file_name = 'temp-%f' % datetime.utcnow().timestamp()
+    logging.info('Downloading build from %s to %s' % (response_data['url'], export_file_name))
 
     with open(export_file_name, 'wb') as f:
         for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
 
+    file_prefix = '%s/%s/' % (target_language, source_language)
+
     with ZipFile(export_file_name) as zipdata:
         for zipinfo in zipdata.infolist():
-            target_filename = zipinfo.filename[zipinfo.filename.find('/')+1:]
-
-            if len(target_filename) == 0:
+            if len(zipinfo.filename) <= len(file_prefix):
+                continue
+        
+            if zipinfo.filename[:len(file_prefix)] != file_prefix:
+                logging.info('Unexpected file name %s does not start with %s' % (zipinfo.filename, file_prefix))
                 continue
 
-            zipinfo.filename = target_filename
+            zipinfo.filename = '%s/%s' % (target_language, zipinfo.filename[len(file_prefix):])
             zipdata.extract(zipinfo, repository.github.git_root)
 
 # Send requests to CrowdIn to do automated machine translation.
