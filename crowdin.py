@@ -285,11 +285,13 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
     logging.info('Downloading build from %s' % response_data['url'])
 
-    with open('temp.zip', 'wb') as f:
+    export_file_name = 'temp-%f' % datetime.utcnow().timestamp()
+
+    with open(export_file_name, 'wb') as f:
         for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
 
-    with ZipFile('temp.zip') as zipdata:
+    with ZipFile(export_file_name) as zipdata:
         for zipinfo in zipdata.infolist():
             target_filename = zipinfo.filename[zipinfo.filename.find('/')+1:]
 
@@ -298,8 +300,6 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
             zipinfo.filename = target_filename
             zipdata.extract(zipinfo, repository.github.git_root)
-
-    os.remove('temp.zip')
 
 # Send requests to CrowdIn to do automated machine translation.
 
