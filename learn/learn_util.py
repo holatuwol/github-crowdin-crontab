@@ -7,8 +7,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from zendesk import get_zendesk_article, zendesk_get_request
 
-language = re.search(r'/docs/[^/]+/[^/]+/([^/]+)/', os.getcwd())[1]
+language_matcher = re.search(r'/docs/[^/]+/[^/]+/([^/]+)/', os.getcwd())
+
+if language_matcher is None:
+	language_matcher = re.search(r'/docs/[^/]+/[^/]+/([^/]+)$', os.getcwd())
+
+language = language_matcher[1]
 language_path = '/%s/' % language
+
+print('Assuming target language %s based on directory %s' % (language, os.getcwd()))
 
 learn_re = r'(https://learn.liferay.com/[^/]+/[^/]+)/([a-z][a-z])/'
 

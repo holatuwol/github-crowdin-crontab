@@ -267,7 +267,11 @@ def translate_links(input_file):
 files = []
 
 if len(sys.argv) == 1:
-	files = git.ls_files('*.md').split('\n')
+	files = [
+		os.path.join(basedir, file_name)
+			for basedir, _, file_name_list in os.walk(os.getcwd())
+				for file_name in file_name_list
+	]
 else:
 	files = sys.argv[1:]
 
