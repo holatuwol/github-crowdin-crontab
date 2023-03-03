@@ -45,7 +45,7 @@ def fix_learn_link(text, link):
 	if hash_index != -1:
 		request_url = request_url[:hash_index]
 
-	translated_path = '%s/docs/%s.md' % (git.rev_parse('--show-toplevel'), link[26:-5].replace('/en/', language_path))
+	translated_path = '%s/docs/%s.md' % (git.rev_parse('--show-toplevel'), request_url[26:-5].replace('/en/', language_path))
 
 	if os.path.isfile(translated_path):
 		text_tl = extract_title_from_md(translated_path)
