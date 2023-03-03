@@ -45,6 +45,13 @@ def fix_learn_link(text, link):
 	if hash_index != -1:
 		request_url = request_url[:hash_index]
 
+	translated_path = '%s/docs/%s.md' % (git.rev_parse('--show-toplevel'), link[26:-5].replace('/en/', language_path))
+
+	if os.path.isfile(translated_path):
+		text_tl = extract_title_from_md(translated_path)
+		link_tl = link.replace('/en/', '/%s/' % language)
+		return '[%s](%s)' % (text_tl if text_tl is not None else text, link_tl) if text is not None else link
+
 	request_url = re.sub(learn_re, '\\1/en/', request_url)
 
 	if request_url in missing_translations:
@@ -274,6 +281,8 @@ if len(sys.argv) == 1:
 	]
 else:
 	files = sys.argv[1:]
+
+print('Checking %d files' % len(files))
 
 for file in files:
 	translate_links(file)
