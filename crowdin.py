@@ -351,22 +351,27 @@ def get_missing_phrases_files(repository, source_language, target_language, file
     return missing_phrases_files
 
 def pre_translate(repository, source_language, target_language, all_files, file_info):
+    if source_language.find('-') != -1:
+        source_language = source_language[:source_language.find('-')]
+
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
+
     # TM = translation memory
+    logging.info('checking if files need to be updated using translation memory')
     missing_phrases_files = get_missing_phrases_files(repository, source_language, target_language, file_info)
-    logging.info('%s files need to be updated using translation memory' % len(missing_phrases_files))
+    logging.info('%d files need to be updated using translation memory' % len(missing_phrases_files))
     translate_with_machine(repository, target_language, 'tm', missing_phrases_files)
 
     # 245660 = DeepL
-    if target_language in ['en', 'ja']:
-        file_info = get_crowdin_file_info(repository, target_language)
-        missing_phrases_files = get_missing_phrases_files(repository, source_language, target_language, file_info)
-        logging.info('%s files need to be updated using DeepL' % len(missing_phrases_files))
+    if source_language in ['en', 'ja'] and target_language in ['en', 'ja']:
+        logging.info('%d files need to be updated using DeepL' % len(missing_phrases_files))
         translate_with_machine(repository, target_language, 245660, missing_phrases_files)
+    else:
+        logging.info('%d files will not be updated using DeepL, because %s to %s is not supported' % (len(missing_phrases_files), source_language, target_language))
 
     # 213743 = Google Translate
-    file_info = get_crowdin_file_info(repository, target_language)
-    missing_phrases_files = get_missing_phrases_files(repository, source_language, target_language, file_info)
-    logging.info('%s files need to be updated using Google Translate' % len(missing_phrases_files))
+    logging.info('%d files need to be updated using Google Translate' % len(missing_phrases_files))
     translate_with_machine(repository, target_language, 213743, missing_phrases_files)
 
     return get_crowdin_file_info(repository, target_language)

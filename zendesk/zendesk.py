@@ -10,7 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))) 
 
-from crowdin_sync import update_repository
+from crowdin import pre_translate
+from crowdin_sync import get_repository_state, update_repository
 from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
 import git
@@ -345,7 +346,9 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
     os.chdir(old_dir)
 
 def translate_zendesk_on_crowdin(repository, domain, source_language, target_language):
-    update_repository(repository, source_language, target_language, None, sync_sources=False)
+    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language, None, False)
+
+    pre_translate(repository, source_language, target_language, all_files, file_info)
 
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
     articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, False)

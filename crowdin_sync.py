@@ -1,4 +1,4 @@
-from crowdin import crowdin_download_translations, crowdin_upload_sources, fix_product_name_tokens, get_crowdin_file_info, pre_translate
+from crowdin import crowdin_download_translations, crowdin_upload_sources, fix_product_name_tokens, get_crowdin_file_info
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders, get_translation_path
 import git
@@ -92,11 +92,6 @@ def update_repository(repository, source_language, target_language, refresh_path
         step_number = step_number + 1
 
         old_file_info, file_info = crowdin_upload_sources(repository, source_language, target_language, new_files)
-
-        logging.info('step %d: run pre-translate' % step_number)
-        step_number = step_number + 1
-
-        file_info = pre_translate(repository, source_language, target_language, all_files, file_info)
 
     logging.info('step %d: check for translations of %d source files' % (step_number, len(new_files)))
     step_number = step_number + 1
