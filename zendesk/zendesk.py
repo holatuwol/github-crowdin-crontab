@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))) 
 
-from crowdin import pre_translate
+from crowdin import crowdin_download_translations, pre_translate
 from crowdin_sync import get_repository_state, update_repository
 from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
@@ -256,64 +256,12 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
 
     return articles, new_tracked_articles, categories, sections, section_paths
 
-def sync_articles(repository, domain, source_language, target_language, articles, article_paths):
-    logging.info('Downloading latest translations for %d articles' % len(article_paths))
-
-    new_files, all_files, file_info = update_repository(repository, source_language, target_language, list(article_paths.values()), sync_sources=False)
-
-    old_dir = os.getcwd()
-
-    os.chdir(repository.github.git_root)
-
-    for article_id, file in sorted(article_paths.items()):
-        article = articles[article_id]
-        target_file = get_translation_path(file, source_language, target_language)
-
-        if not os.path.isfile(target_file):
-            continue
-
-        if target_language in article['label_names'] and 'mt' not in article['label_names']:
-            print(target_file, 'not machine translated')
-            os.remove(target_file)
-            git.checkout(target_file)
-            continue
-
-        crowdin_file = get_crowdin_file(repository, file)
-
-        if crowdin_file not in file_info:
-            continue
-
-        file_metadata = file_info[crowdin_file]
-
-        if file_metadata['phrases'] != file_metadata['translated']:
-            print(target_file, 'not fully translated')
-            os.remove(target_file)
-            git.checkout(target_file)
-            continue
-
-        new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
-
-        if old_content != new_content:
-            with open(target_file, 'w') as f:
-                f.write('<h1>%s</h1>\n' % new_title)
-                f.write(new_content)
-
-        git.add(target_file)
-
-    git.commit('-m', 'Translated existing articles: %s' % datetime.now())
-
-    os.chdir(old_dir)
-
-    return file_info
-
 def copy_crowdin_to_zendesk(repository, domain, source_language, target_language):
     articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, False)
 
     old_dir = os.getcwd()
 
     article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
-
-    file_info = sync_articles(repository, domain, source_language, target_language, articles, {})
 
     updated_source_files = [
         article_paths[article_id]
@@ -346,14 +294,23 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
     os.chdir(old_dir)
 
 def translate_zendesk_on_crowdin(repository, domain, source_language, target_language):
-    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language, None, False)
+    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language)
 
     pre_translate(repository, source_language, target_language, all_files, file_info)
 
+    crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
+
+    old_dir = os.getcwd()
+
+    os.chdir(repository.github.git_root)
+
+    git.add('*.html')
+    git.commit('-m', 'Translated existing articles: %s' % datetime.now())
+
+    os.chdir(old_dir)
+
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
     articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, False)
-
-    sync_articles(repository, domain, source_language, target_language, articles, article_paths)
 
     with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
         json.dump(articles, f)

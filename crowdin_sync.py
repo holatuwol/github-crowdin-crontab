@@ -18,7 +18,7 @@ logging.basicConfig(
 
 # Update local copies of translations, translation memory, and glossaries.
 
-def get_repository_state(repository, source_language, target_language, refresh_paths=None, check_upstream=False):
+def get_repository_state(repository, source_language, target_language):
     global git_root
     git_root = repository.github.git_root
     
@@ -39,9 +39,8 @@ def get_repository_state(repository, source_language, target_language, refresh_p
     all_files.extend(branch_files)
 
     all_files = sorted(set(all_files))
-    new_files = refresh_paths if refresh_paths is not None else [file for file in all_files]
 
-    return new_files, all_files, file_info
+    return all_files, all_files, file_info
 
 def check_file_lists(repository, source_language, target_language, new_files, all_files):
     for file in all_files:
@@ -74,13 +73,13 @@ def check_file_lists(repository, source_language, target_language, new_files, al
         if not os.path.isfile(target_file):
             new_files.append(file)
 
-def update_repository(repository, source_language, target_language, refresh_paths=None, check_upstream=False, create_issues=False, sync_sources=True):
+def update_repository(repository, source_language, target_language):
     step_number = 1
 
     logging.info('step %d: get repository state for translation download' % step_number)
     step_number = step_number + 1
 
-    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language, refresh_paths, check_upstream)
+    new_files, all_files, file_info = get_repository_state(repository, source_language, target_language)
 
     logging.info('step %d: check for existing translations of %d files' % (step_number, len(all_files)))
     step_number = step_number + 1
@@ -97,23 +96,6 @@ def update_repository(repository, source_language, target_language, refresh_path
     step_number = step_number + 1
 
     crowdin_download_translations(repository, source_language, target_language, all_files, file_info)
-
-    old_file_info = file_info
-
-    if create_issues:
-        logging.info('step %d: generate github issues' % step_number)
-        step_number = step_number + 1
-
-        init_issues(repository, all_files, file_info)
-
-    logging.info('step %d: add updated translations to github' % step_number)
-    step_number = step_number + 1
-
-    if create_issues:
-        logging.info('step %d: update github project' % step_number)
-        step_number = step_number + 1
-
-        update_translation_issues(repository, file_info)
 
     logging.info('cd -')
     os.chdir(initial_dir)
