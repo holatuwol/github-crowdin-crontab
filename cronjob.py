@@ -38,6 +38,12 @@ def list_jobs():
     print()
     print('Valid commands:')
 
+    def print_zendesk_help(git_repository, target_language):
+        print('  python %s %s crowdin %s' % (sys.argv[0], git_repository, target_language))
+        print('  python %s %s translate %s' % (sys.argv[0], git_repository, target_language))
+        print('  python %s %s update %s' % (sys.argv[0], git_repository, target_language))
+        print('  python %s %s zendesk %s' % (sys.argv[0], git_repository, target_language))
+
     for repository in all_repositories:
         if repository is None:
             continue
@@ -45,28 +51,21 @@ def list_jobs():
         git_root = repository.github.git_root
 
         git_repository = git_root[git_root.rfind('/')+1:]
-        git_folder = repository.github.project_folder if repository.github.single_folder is None else repository.github.single_folder
 
         if repository.github.origin == 'holatuwol/zendesk-articles':
             for target_language in ['ja', 'ko']:
-                print('  python %s %s %s crowdin %s' % (sys.argv[0], git_repository, git_folder, target_language))
-                print('  python %s %s %s translate %s' % (sys.argv[0], git_repository, git_folder, target_language))
-                print('  python %s %s %s update %s' % (sys.argv[0], git_repository, git_folder, target_language))
-                print('  python %s %s %s zendesk %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print_zendesk_help(git_repository, target_language)
         elif repository.github.origin == 'holatuwol/zendesk-articles-ja':
-            print('  python %s %s %s crowdin en-us' % (sys.argv[0], git_repository, git_folder))
-            print('  python %s %s %s translate en-us' % (sys.argv[0], git_repository, git_folder))
-            print('  python %s %s %s update %s' % (sys.argv[0], git_repository, git_folder, target_language))
-            print('  python %s %s %s zendesk en-us' % (sys.argv[0], git_repository, git_folder))
+            print_zendesk_help(git_repository, 'en-us')
         else:
             for target_language in ['ja', 'ko']:
-                print('  python %s %s %s upload %s' % (sys.argv[0], git_repository, git_folder, target_language))
-                print('  python %s %s %s download %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s upload %s' % (sys.argv[0], git_repository, target_language))
+                print('  python %s %s download %s' % (sys.argv[0], git_repository, target_language))
 
             if repository.github.upstream == 'liferay/liferay-learn':
-                print('  python %s %s %s disclaimer %s' % (sys.argv[0], git_repository, git_folder, target_language))
+                print('  python %s %s disclaimer %s' % (sys.argv[0], git_repository, target_language))
 
-def execute_job(domain, git_repository, git_folder, direction, target_language):
+def execute_job(domain, git_repository, direction, target_language):
     all_repositories = get_repositories(False)
 
     check_repositories = []
@@ -79,13 +78,6 @@ def execute_job(domain, git_repository, git_folder, direction, target_language):
 
         if git_root[git_root.rfind('/')+1:] != git_repository:
             continue
-
-        if repository.github.single_folder is None:
-            if repository.github.project_folder != git_folder:
-                continue
-        else:
-            if repository.github.single_folder != git_folder:
-                continue
 
         check_repositories.append(repository)
 
@@ -144,7 +136,7 @@ def execute_job(domain, git_repository, git_folder, direction, target_language):
             update_repository(repository, sync_sources=sync_sources)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 4:
         list_jobs()
     else:
-        execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+        execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3])

@@ -6,7 +6,7 @@ disclaimer_zendesk = {
 ''',
 'en-us': '''
 <aside class="alert alert-info"><span class="wysiwyg-color-blue120">
-This article has been machine translated from its original language for your convenience.  Please use discretion as this translation may include some inaccuracies. If you encounter issues with the translation, please use the feedback button to let us know.
+Please be aware that the page you are viewing has been machine translated from Japanese into English and may contain some translation errors. If you observe any issues with the translation, please contact us.
 </span></aside>
 '''
 }

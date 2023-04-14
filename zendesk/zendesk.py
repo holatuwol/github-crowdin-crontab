@@ -195,7 +195,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
     articles = {}
 
     try:
-        with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'r') as f:
+        with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, source_language, domain), 'r') as f:
             articles = json.load(f)
     except:
         pass

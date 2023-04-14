@@ -13,7 +13,7 @@ GitHubRepository = namedtuple(
 
 CrowdInRepository = namedtuple(
     'CrowdinRepository',
-    ' '.join(['project_id', 'project_name', 'api_key', 'dest_folder', 'delete_enabled', 'single_folder'])
+    ' '.join(['source_language', 'project_id', 'project_name', 'api_key', 'dest_folder', 'delete_enabled', 'single_folder'])
 )
 
 TranslationRepository = namedtuple(
@@ -21,7 +21,7 @@ TranslationRepository = namedtuple(
     ' '.join(['github', 'crowdin'])
 )
 
-def get_repository(projects, git_repository, git_branch, git_folder, project_id, project_name, project_folder, single_folder, delete_enabled):
+def get_repository(projects, source_language, git_repository, git_branch, git_folder, project_id, project_name, project_folder, single_folder, delete_enabled):
     single_folder = single_folder.strip()
 
     if len(single_folder) == 0:
@@ -68,7 +68,7 @@ def get_repository(projects, git_repository, git_branch, git_folder, project_id,
 
     return TranslationRepository(
         GitHubRepository(git_root, origin, upstream, git_branch, git_folder, github_single_folder),
-        CrowdInRepository(project_id, project_name, project_api_key, project_folder, delete_enabled, crowdin_single_folder)
+        CrowdInRepository(source_language, project_id, project_name, project_api_key, project_folder, delete_enabled, crowdin_single_folder)
     )
 
 def get_subrepositories(repository):
