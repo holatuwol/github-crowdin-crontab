@@ -86,12 +86,6 @@ def update_repository(repository, source_language, target_language):
 
     check_file_lists(repository, source_language, target_language, new_files, all_files)
 
-    if sync_sources:
-        logging.info('step %d: add %d source files to crowdin' % (step_number, len(new_files)))
-        step_number = step_number + 1
-
-        old_file_info, file_info = crowdin_upload_sources(repository, source_language, target_language, new_files)
-
     logging.info('step %d: check for translations of %d source files' % (step_number, len(new_files)))
     step_number = step_number + 1
 

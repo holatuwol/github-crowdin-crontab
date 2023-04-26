@@ -191,6 +191,8 @@ def get_crowdin_file_info(repository, target_language):
         target_language = 'ja'
     if target_language[0:2] == 'ko':
         target_language = 'ko'
+    if target_language[0:2] == 'en':
+        target_language = 'en'
 
     file_info = {}
     item_paths = {}

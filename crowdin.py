@@ -150,8 +150,12 @@ def get_directory(repository, path):
     while parent_path not in directory_paths and parent_path != '/':
         parent_path = os.path.dirname(parent_path)
 
-    parent_directory = directory_paths[parent_path]
-    path_elements = path[len(parent_path)+1:].split('/')
+    if parent_path == '/':
+        parent_directory = {'id': 0}
+        path_elements = path[1:].split('/')
+    else:
+        parent_directory = directory_paths[parent_path]
+        path_elements = path[len(parent_path)+1:].split('/')
     
     for i, name in enumerate(path_elements):
         logging.info('Looking up subdirectory %s', '/'.join(path_elements[:i+1]))
@@ -166,6 +170,12 @@ def get_directory(repository, path):
     return parent_directory
 
 def crowdin_upload_sources(repository, source_language, target_language, new_files):
+    if source_language.find('-') != -1:
+        source_language = source_language[:source_language.find('-')]
+
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
+
     before_upload = get_crowdin_file_info(repository, target_language)
 
     for file in new_files:
@@ -341,6 +351,12 @@ def translate_with_machine(repository, target_language, engine, file_ids):
 crowdin_request('/projects', 'GET', {})
 
 def get_missing_phrases_files(repository, source_language, target_language, file_info):
+    if source_language.find('-') != -1:
+        source_language = source_language[:source_language.find('-')]
+
+    if target_language.find('-') != -1:
+        target_language = target_language[:target_language.find('-')]
+
     missing_phrases_files = {}
 
     for crowdin_file, metadata in file_info.items():

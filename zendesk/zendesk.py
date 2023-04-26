@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))) 
 
-from crowdin import crowdin_download_translations, pre_translate
+from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
 from crowdin_sync import get_repository_state, update_repository
 from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
@@ -206,19 +206,22 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
 
     if fetch_update:
         all_articles = get_new_articles(domain)
+    else:
+        with open('%s/zendesk/all_articles_%s.json' % (initial_dir, domain), 'r') as f:
+            all_articles = json.load(f)
 
-        # Check for updates by comparing against our last set of tracked articles
+    # Check for updates by comparing against our last set of tracked articles
 
-        for article_id, article in all_articles.items():
-            if article_id in articles:
-                if not is_tracked_article(article, source_language, section_paths):
-                    del articles[article_id]
-                elif article['updated_at'] != articles[article_id]['updated_at']:
-                    new_tracked_articles[article_id] = article
-            elif is_tracked_article(article, source_language, section_paths):
+    for article_id, article in all_articles.items():
+        if article_id in articles:
+            if not is_tracked_article(article, source_language, section_paths):
+                del articles[article_id]
+            elif article['updated_at'] != articles[article_id]['updated_at']:
                 new_tracked_articles[article_id] = article
+        elif is_tracked_article(article, source_language, section_paths):
+            new_tracked_articles[article_id] = article
 
-        articles.update(new_tracked_articles)
+    articles.update(new_tracked_articles)
 
     logging.info('Found %d new/updated tracked articles' % len(new_tracked_articles))
 
@@ -227,7 +230,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
-    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, source_language, domain), 'w') as f:
         json.dump(articles, f)
 
     os.chdir(old_dir)
@@ -289,8 +292,15 @@ def translate_zendesk_on_crowdin(repository, domain, source_language, target_lan
 def copy_zendesk_to_crowdin(repository, domain, source_language, target_language):
     articles, article_paths, refresh_articles, refresh_paths = download_zendesk_articles(repository, domain, source_language, target_language, False)
 
-    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, source_language, domain), 'w') as f:
         json.dump(articles, f)
+
+    old_dir = os.getcwd()
+    os.chdir(repository.github.git_root)
+
+    crowdin_upload_sources(repository, source_language, target_language, refresh_paths.values())
+
+    os.chdir(old_dir)
 
     return refresh_articles
 
@@ -507,7 +517,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
-    with open('%s/zendesk/articles_%s.json' % (initial_dir, domain), 'w') as f:
+    with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, source_language, domain), 'w') as f:
         json.dump(articles, f)
 
     refresh_paths = {
