@@ -237,7 +237,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
 
     return articles, new_tracked_articles, categories, sections, section_paths
 
-def copy_crowdin_to_zendesk(repository, domain, source_language, target_language):
+def copy_crowdin_to_zendesk(repository, domain, source_language, target_language, authors=None):
     articles, new_tracked_articles, categories, sections, section_paths = get_zendesk_articles(repository, domain, source_language, target_language, True)
 
     old_dir = os.getcwd()
@@ -269,7 +269,13 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
         if target_language in article['label_names'] and target_file not in updated_target_files:
             continue
 
-        update_zendesk_translation(repository, domain, article, file, source_language, target_language)
+        if authors is None or str(article['author_id']) in authors:
+            if authors is not None:
+                logging.info('%s (updating since author is included)' % article_id)
+
+            update_zendesk_translation(repository, domain, article, file, source_language, target_language)
+        else:
+            logging.info('%s (skipping since author is excluded)' % article_id)
 
     os.chdir(old_dir)
 

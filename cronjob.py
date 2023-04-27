@@ -106,7 +106,10 @@ def execute_job(domain, git_repository, direction, target_language):
         elif direction == 'update':
             download_zendesk_articles(repository, domain, 'ja', 'en-us', True)
         elif direction == 'zendesk':
-            copy_crowdin_to_zendesk(repository, domain, 'ja', 'en-us')
+            with open('authors_ja.json', 'r') as f:
+                authors = json.load(f)
+
+            copy_crowdin_to_zendesk(repository, domain, 'ja', 'en-us', authors)
         else:
             print('invalid target of zendesk sync (crowdin, zendesk)')
     elif repository.github.upstream == 'liferay/liferay-learn':
