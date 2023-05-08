@@ -125,7 +125,7 @@ def zendesk_get_request(domain, api_path, attribute_name, params=None):
     return result
 
 def init_zendesk(domain):
-    logging.info('Authenticating with Liferay SAML IdP')
+    logging.info('Authenticating with %s Liferay SAML IdP' % domain)
     authenticate('https://%s/access/login' % domain, None)
 
     return zendesk_get_request(domain, '/users/me.json', 'user')[0]

@@ -217,7 +217,7 @@ def hide_code_translations(repository, source_language, target_language, file_na
     return has_suggestions
 
 def process_code_translations(project_id, project_name, project_folder, source_language, target_language, force=False):
-    repository = TranslationRepository(None, CrowdInRepository(project_id, project_name, None, project_folder, False, False))
+    repository = TranslationRepository(None, CrowdInRepository(source_language, project_id, project_name, None, project_folder, False, False))
 
     file_info = get_crowdin_file_info(repository, target_language)
 
