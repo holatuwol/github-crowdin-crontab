@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 from collections import defaultdict
 from datetime import datetime
 import dateutil.parser
@@ -13,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfi
 
 from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
 from crowdin_sync import get_repository_state, update_repository
-from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk
+from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk, disclaimer_zendesk_text
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
 import git
 from repository import initial_dir
@@ -304,7 +305,11 @@ def copy_zendesk_to_crowdin(repository, domain, source_language, target_language
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
 
-    crowdin_upload_sources(repository, source_language, target_language, refresh_paths.values())
+    if len(refresh_paths) > 0:
+        print('Uploading %d files to crowdin...' % len(refresh_paths))
+        crowdin_upload_sources(repository, source_language, target_language, refresh_paths.values())
+    else:
+        print('No files have been updated, nothing to upload to crowdin')
 
     os.chdir(old_dir)
 
@@ -588,14 +593,8 @@ def is_tracked_article(article, source_language, section_paths):
 def remove_nbsp(content):
     new_content = content.replace('\xa0', ' ')
 
-    if new_content != content:
-        print('replaced nbsp')
-
     content = new_content
     new_content = new_content.replace('</span><span>', '').replace('</span> <span>', ' ')
-
-    if new_content != content:
-        print('replaced empty span')
 
     return new_content
 
@@ -630,7 +629,7 @@ def requires_update(repository, domain, article, source_language, target_languag
     with open(file, 'r') as f:
         old_content = ''.join(f.readlines()).strip()
 
-    new_content = '<h1>%s</h1>\n%s' % (article['title'], article['body'])
+    new_content = '<h1>%s</h1>\n%s' % (article['title'], remove_nbsp(article['body']))
 
     if old_content != new_content:
         logging.info('%s (requires update check: mismatched content)' % article['id'])
@@ -638,23 +637,21 @@ def requires_update(repository, domain, article, source_language, target_languag
 
     # check if it's missing a disclaimer
 
-    missing_disclaimer = True
+    missing_disclaimer = False
     new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
-    if old_content == new_content:
-        missing_disclaimer = False
-    elif fetch_update:
+    if fetch_update:
         mt_article = get_zendesk_article(domain, article['id'], target_language)
 
         if mt_article is None:
             logging.info('%s (requires update check: deleted article)' % article['id'])
             return False
 
-        missing_disclaimer = mt_article['body'].find(disclaimer_zendesk[target_language].strip()) == -1
+        mt_article_text = BeautifulSoup(mt_article['body'], features='html.parser').get_text().strip()
 
-    if missing_disclaimer:
-        logging.info('%s (requires update check: missing MT disclaimer)' % article['id'])
-        return True
+        if mt_article_text.find(disclaimer_zendesk_text[target_language]) == -1:
+            logging.info('%s (requires update check: missing MT disclaimer)' % article['id'])
+            return True
 
     logging.info('%s (requires update check: no update required)' % article['id'])
     return False
@@ -706,12 +703,11 @@ def update_zendesk_translation(repository, domain, article, file, source_languag
 
     if not requires_update(repository, domain, article, source_language, target_language, file, True):
         logging.info('%s (skipping translation, file is up to date)' % article['id'])
+        return False
 
     new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
     logging.info('%s (updating translation)' % article['id'])
-
-    # return True
 
     # Update the translation
 

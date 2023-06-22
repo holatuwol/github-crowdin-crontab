@@ -110,8 +110,12 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
         request_url = request_url + '?' + '&'.join([key + '=' + str(value) for key, value in data.items()])
 
         r = requests.get(request_url, headers=headers)
-    else:
+    elif method == 'POST':
         r = requests.post(request_url, json=data, headers=headers)
+    elif method == 'PUT':
+        r = requests.put(request_url, json=data, headers=headers)
+    else:
+        raise 'Unrecognized method: %s' % method
 
     if r.status_code == 401:
         logging.error('Invalid user name or password')

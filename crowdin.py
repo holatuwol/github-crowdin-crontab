@@ -192,26 +192,47 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     ignore_files = set(df[df['repository'] == repository.github.upstream]['file'].values)
     upload_files = [file for file in new_files if file not in ignore_files]
 
-    api_path = '/projects/%s/files' % repository.crowdin.project_id
+    existing_files = {}
 
     for i, file in enumerate(upload_files):
+        file_name = os.path.basename(file)
+
         logging.info('Preparing to upload file %d/%d...' % (i, len(upload_files)))
 
         directory = get_directory(repository, os.path.dirname(file))
+        directory_id = directory['id']
 
         logging.info('Uploading file %d/%d...' % (i, len(upload_files)))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
 
+        if directory_id not in existing_files:
+            data = {
+                'directoryId': directory_id
+            }
+
+            api_path = '/projects/%s/files' % repository.crowdin.project_id
+            status_code, directory_response_data = crowdin_request(api_path, 'GET', data)
+            existing_files[directory_id] = directory_response_data
+
+        matching_files = [directory_file for directory_file in existing_files[directory_id] if directory_file['data']['name'] == file_name]
+
         data = {
-            'storageId': response_data['id'],
-            'name': os.path.basename(file),
-            'directoryId': directory['id']
+            'storageId': response_data['id']
         }
 
-        logging.info('Telling crowdin about uploaded file %d/%d...' % (i, len(upload_files)))
+        logging.info('Telling crowdin about uploaded file %d/%d (%s)...' % (i, len(upload_files), file_name))
 
-        crowdin_request(api_path, 'POST', data)
+        if len(matching_files) == 1:
+            data['updateOption'] = 'keep_translations_and_approvals'
+            file_id = matching_files[0]['data']['id']
+            api_path = '/projects/%s/files/%s' % (repository.crowdin.project_id, file_id)
+            crowdin_request(api_path, 'PUT', data)
+        else:
+            data['name'] = file_name
+            data['directoryId'] = directory_id
+            api_path = '/projects/%s/files' % repository.crowdin.project_id
+            crowdin_request(api_path, 'POST', data)
 
     for file in new_files:
         git.checkout(file)

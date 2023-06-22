@@ -27,13 +27,21 @@ for config in $(git config --list | cut -d'=' -f 1); do
 done
 
 echo "Fetching new articles and preparing translations"
-# docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py zendesk-articles update ja && python cronjob.py zendesk-articles crowdin ja && python cronjob.py zendesk-articles translate ja && python cronjob.py zendesk-articles zendesk ja"
-docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab && python cronjob.py zendesk-articles-ja ja update en-us && python cronjob.py zendesk-articles-ja crowdin en-us && python cronjob.py zendesk-articles-ja translate en-us && python cronjob.py zendesk-articles-ja zendesk en-us"
+
+EN_JA_TRANSLATION=
+EN_JA_TRANSLATION=$(echo update crowdin translate zendesk | tr ' ' '\n' | awk '{ print "python cronjob.py zendesk-articles " $1 " ja;" }' | tr '\n' ' ')
+
+JA_EN_TRANSLATION=
+JA_EN_TRANSLATION=$(echo update crowdin translate zendesk | tr ' ' '\n' | awk '{ print "python cronjob.py zendesk-articles-ja " $1 " en-us;" }' | tr '\n' ' ')
+
+docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab; ${EN_JA_TRANSLATION} ${JA_EN_TRANSLATION}"
 
 echo "Cleaning up docker containers"
+
 docker stop crowdin
 docker rm -v crowdin
 
 echo "Updating GitHub with new articles and translations"
+
 cd /ephemeral/crowdin/zendesk-articles
 git push origin master
