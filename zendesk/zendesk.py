@@ -138,8 +138,8 @@ def get_article_path(source_article, target_language, section_paths):
     return '%s/%s%s.html' % (target_language[0:2], section_path, url_name)
 
 def get_zendesk_article(domain, article_id, target_language):
-    api_path = '/help_center/%s/articles/%s.json' % (target_language, article_id)
-    mt_articles = zendesk_get_request(domain, api_path, 'article')
+    api_path = '/help_center/articles/%s/translations/%s.json' % (article_id, target_language)
+    mt_articles = zendesk_get_request(domain, api_path, 'translation')
 
     if mt_articles is None:
         return None
@@ -621,7 +621,7 @@ def requires_update(repository, domain, article, source_language, target_languag
     target_path = '%s/%s' % (repository.github.git_root, target_file)
 
     if not os.path.exists(target_path):
-        logging.info('%s (requires update check: no translation %s)' % (article['id'], target_path))
+        logging.info('%s (requires update check: no translation on file system %s)' % (article['id'], target_path))
         return True
 
     # check if the source target_language was changed
@@ -641,11 +641,15 @@ def requires_update(repository, domain, article, source_language, target_languag
     new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
 
     if fetch_update:
+        if get_zendesk_article(domain, article['id'], source_language) is None:
+            logging.info('%s (requires update check: deleted article)' % article['id'])
+            return False
+
         mt_article = get_zendesk_article(domain, article['id'], target_language)
 
         if mt_article is None:
-            logging.info('%s (requires update check: deleted article)' % article['id'])
-            return False
+            logging.info('%s (requires update check: missing %s translation on zendesk)' % (article['id'], target_language))
+            return True
 
         mt_article_text = BeautifulSoup(mt_article['body'], features='html.parser').get_text().strip()
 
