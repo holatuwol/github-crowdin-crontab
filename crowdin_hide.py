@@ -201,7 +201,7 @@ def is_within_code_tag(x):
 
         inner_html = x.decode_contents()
 
-        if len(inner_html) > 0 and inner_html[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+        if len(inner_html) > 1 and inner_html[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and inner_html[1] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
             return False
 
     return True
