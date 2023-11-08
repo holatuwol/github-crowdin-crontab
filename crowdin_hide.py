@@ -127,6 +127,9 @@ def should_hide_tag(tag):
     if tag.name != 'code' and tag.name != 'pre':
         inner_html = tag.decode_contents()
 
+        if inner_html.find('\n') != -1:
+            return True
+
         if inner_html[:5] == '<code' and inner_html[-7:] == '</code>':
             return True
         
@@ -167,12 +170,18 @@ def is_hidden_link(x):
     return hidden_title.text.strip() == 'Link addresses'
 
 def is_within_code_tag(x):
-    has_simple_match = x.text and x.text.find('[TOC') == 0 or \
-        x.text and x.text.find('CVSS') != -1 and x.text.find('CVE') != -1 or \
-        x.find_parent(attrs={'id': 'front-matter'}) is not None
+    if 'class' in x.attrs and 'crowdin_phrase_translated' in x.attrs['class']:
+        return False
 
-    if has_simple_match:
-        return True
+    if x.text is not None:
+        if x.text.find('[TOC') == 0:
+            return True
+
+        if x.text.find('CVSS') != -1 and x.text.find('CVE') != -1:
+            return True
+
+        if x.find_parent(attrs={'id': 'front-matter'}) is not None:
+            return True
 
     if should_hide_tag(x) or is_hidden_link(x):
         return True
@@ -186,8 +195,14 @@ def is_within_code_tag(x):
     if parent_code is not None and not should_hide_tag(parent_code):
         return False
 
-    if parent_pre is not None and not should_hide_tag(parent_pre):
-        return False
+    if parent_pre is not None:
+        if not should_hide_tag(parent_pre):
+            return False
+
+        inner_html = x.decode_contents()
+
+        if len(inner_html) > 0 and inner_html[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+            return False
 
     return True
 
