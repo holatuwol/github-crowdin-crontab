@@ -38,7 +38,7 @@ def process_markdown_file(file_name):
 		lines = f.readlines()
 
 	in_code_block = False
-	in_fenced_block = False
+	fenced_block = None
 
 	new_lines = []
 
@@ -50,13 +50,15 @@ def process_markdown_file(file_name):
 		if stripped_line[:3] == '```':
 			if in_code_block:
 				in_code_block = False
-			elif in_fenced_block:
-				in_fenced_block = False
-				new_line = '</div></div>\n'
-			elif stripped_line[:4] == '```{' and stripped_line[-1] == '}':
-				in_fenced_block = True
-				block_type = stripped_line[4:-1]
-				new_line = line[:line.find('```')] + f'<div class="adm-block adm-{block_type}"><div class="adm-heading"><svg class="adm-icon"><use xlink:href="#adm-{block_type}"></use></svg><span>{block_type}</span></div><div class="adm-body">\n'
+			elif fenced_block is not None:
+				if fenced_block != 'raw' and fenced_block != 'toctree':
+					new_line = '</div></div>\n'
+				fenced_block = None
+			elif stripped_line[:4] == '```{' and stripped_line.find('}') != -1:
+				fenced_block = stripped_line[4:stripped_line.find('}')]
+				print(fenced_block)
+				if fenced_block != 'raw' and fenced_block != 'toctree':
+					new_line = line[:line.find('```')] + f'<div class="adm-block adm-{fenced_block}"><div class="adm-heading"><svg class="adm-icon"><use xlink:href="#adm-{fenced_block}"></use></svg><span>{fenced_block}</span></div><div class="adm-body">\n'
 			else:
 				in_code_block = True
 		else:
