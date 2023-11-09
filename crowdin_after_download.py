@@ -20,7 +20,7 @@ def process_html_links(line):
 		if z == -1:
 			break
 
-		line = line[:x] + '[' + line[y+2:z] + '](' + line[x+9:y] + '</a>' + line[z+4:]
+		line = line[:x] + '[' + line[y+2:z] + '](' + line[x+9:y] + ') ' + line[z+4:]
 
 	return line
 
