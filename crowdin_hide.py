@@ -127,9 +127,6 @@ def should_hide_tag(tag):
     if tag.name != 'code' and tag.name != 'pre':
         inner_html = tag.decode_contents()
 
-        if inner_html.find('\n') != -1:
-            return True
-
         if inner_html[:5] == '<code' and inner_html[-7:] == '</code>':
             return True
         
@@ -188,8 +185,13 @@ def is_within_code_tag(x):
 
     parent_code = x.find_parent('code')
     parent_pre = x.find_parent('pre')
+    parent_div = x.find_parent('div')
 
-    if parent_code is None and parent_pre is None:
+    if parent_div is not None:
+        if 'class' not in parent_div.attrs or 'adm-body' not in parent_div.attrs['class']:
+            parent_div = None
+
+    if parent_code is None and parent_pre is None and parent_div is None:
         return False
 
     if parent_code is not None and not should_hide_tag(parent_code):
@@ -203,6 +205,17 @@ def is_within_code_tag(x):
 
         if len(inner_html) > 1 and inner_html[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and inner_html[1] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
             return False
+
+    if parent_div is not None:
+        grandparent_div = parent_div.find_parent('div')
+
+        if grandparent_div is not None and 'class' in grandparent_div.attrs:
+            for literal_adm in ['adm-raw', 'adm-include', 'adm-literalinclude']:
+                if literal_adm in grandparent_div.attrs['class']:
+                    print(literal_adm)
+                    return True
+
+        return False
 
     return True
 
