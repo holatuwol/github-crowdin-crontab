@@ -28,6 +28,9 @@ def process_md_links(line):
 
 	return line
 
+def is_code_fenced_block(fenced_block):
+	return fenced_block == 'raw' or fenced_block == 'toctree' or fenced_block == 'include' or fenced_block == 'literalinclude'
+
 def process_markdown_file(file_name):
 	if file_name[-3:] != '.md':
 		return
@@ -51,13 +54,13 @@ def process_markdown_file(file_name):
 			if in_code_block:
 				in_code_block = False
 			elif fenced_block is not None:
-				if fenced_block != 'raw' and fenced_block != 'toctree':
-					new_line = '</div></div>\n'
+				if not is_code_fenced_block(fenced_block):
+					new_line = line[:line.find('```')] + '</div></div>\n'
 				fenced_block = None
 			elif stripped_line[:4] == '```{' and stripped_line.find('}') != -1:
 				fenced_block = stripped_line[4:stripped_line.find('}')]
 				print(fenced_block)
-				if fenced_block != 'raw' and fenced_block != 'toctree':
+				if not is_code_fenced_block(fenced_block):
 					new_line = line[:line.find('```')] + f'<div class="adm-block adm-{fenced_block}"><div class="adm-heading"><svg class="adm-icon"><use xlink:href="#adm-{fenced_block}"></use></svg><span>{fenced_block}</span></div><div class="adm-body">\n'
 			else:
 				in_code_block = True
