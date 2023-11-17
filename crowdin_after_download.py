@@ -1,26 +1,57 @@
 import os
 import sys
 
+def process_open_tag_first(line, x):
+	y = line.find('">', x)
+
+	if y == -1:
+		return line, False
+
+	z = line.find('</a>', y)
+
+	if z == -1:
+		return line, False
+
+	prefix = '[' if x == 0 or line[x-1] == ' ' else ' ['
+	suffix = ')' if line[z+4] == ' ' else ') '
+
+	return line[:x] + prefix + line[y+2:z].strip() + '](' + line[x+9:y] + suffix + line[z+4:], True
+
+def process_close_tag_first(line, x):
+	y = line.find('<a href="', x)
+
+	if y == -1:
+		return line, False
+
+	z = line.find('">', y)
+
+	if z == -1:
+		return line, False
+
+	prefix = '[' if x == 0 or line[x-1] == ' ' else ' ['
+	suffix = ')' if line[z+2] == ' ' else ') '
+
+	return line[:x] + prefix + line[x+4:y].strip() + '](' + line[y+9:z] + suffix + line[z+2:], True
+
 def process_html_links(line):
 	x = 0
 
 	while True:
-		x = line.find('<a href="', x)
+		x1 = line.find('<a href="', x)
+		x2 = line.find('</a>', x)
 
-		if x == -1:
+		if x1 == -1 or x2 == -1:
 			break
 
-		y = line.find('">', x)
+		if x1 < x2:
+			line, is_continue = process_open_tag_first(line, x1)
+			x = x1
+		else:
+			line, is_continue = process_close_tag_first(line, x2)
+			x = x2
 
-		if y == -1:
+		if not is_continue:
 			break
-
-		z = line.find('</a>', y)
-
-		if z == -1:
-			break
-
-		line = line[:x] + '[' + line[y+2:z] + '](' + line[x+9:y] + ') ' + line[z+4:]
 
 	return line
 
