@@ -1,15 +1,10 @@
 import os
 import sys
 
-def process_open_tag_first(line, x):
+def process_open_tag_first(line, x, z):
 	y = line.find('">', x)
 
 	if y == -1:
-		return line, False
-
-	z = line.find('</a>', y)
-
-	if z == -1:
 		return line, False
 
 	prefix = '[' if x == 0 or line[x-1] == ' ' else ' ['
@@ -17,12 +12,7 @@ def process_open_tag_first(line, x):
 
 	return line[:x] + prefix + line[y+2:z].strip() + '](' + line[x+9:y] + suffix + line[z+4:], True
 
-def process_close_tag_first(line, x):
-	y = line.find('<a href="', x)
-
-	if y == -1:
-		return line, False
-
+def process_close_tag_first(line, x, y):
 	z = line.find('">', y)
 
 	if z == -1:
@@ -44,10 +34,10 @@ def process_html_links(line):
 			break
 
 		if x1 < x2:
-			line, is_continue = process_open_tag_first(line, x1)
+			line, is_continue = process_open_tag_first(line, x1, x2)
 			x = x1
 		else:
-			line, is_continue = process_close_tag_first(line, x2)
+			line, is_continue = process_close_tag_first(line, x2, x1)
 			x = x2
 
 		if not is_continue:
