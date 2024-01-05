@@ -76,14 +76,17 @@ def fix_learn_link(text, link):
 		r.encoding = r.apparent_encoding
 		content_en = r.text
 
-	r = requests.get(request_url.replace('/en/', language_path))
+	if request_url.find('https://learn.liferay.com/en/') == 0:
+		link_tl = 'https://learn.liferay.com/%s/%s' % (language, request_url[request_url.find('/', 26)+1:])
+	else:
+		link_tl = 'https://learn.liferay.com/%s/%s' % (language, request_url[26:])
+
+	r = requests.get(link_tl)
 
 	if r.status_code != 200:
 		missing_translations.add(request_url)
 		print('missing translation to %s: %s' % (language, request_url))
 		return '[%s](%s)' % (text, link) if text is not None else link
-
-	link_tl = link.replace('/en/', '/%s/' % language)
 
 	if content_en is None:
 		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
