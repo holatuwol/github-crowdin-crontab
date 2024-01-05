@@ -57,11 +57,17 @@ def fix_learn_link(text, link):
 	if request_url in missing_translations:
 		return '[%s](%s)' % (text, link) if text is not None else link
 
-	r = requests.get(request_url)
+	status_code = -1
 
-	if r.status_code != 200:
+	try:
+		r = requests.get(request_url)
+		status_code = r.status_code
+	except:
+		pass
+
+	if status_code != 200:
 		missing_translations.add(request_url)
-		print('broken link:', request_url)
+		print('unexpected status code %d: %s' % (status_code, request_url))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	content_en = None
