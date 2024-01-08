@@ -56,6 +56,8 @@ def fix_learn_link(text, link):
 	if link.find('https://learn.liferay.com/reference/') == 0:
 		return '[%s](%s)' % (text, 'https://resources.learn.liferay.com' + request_url[25:])
 
+	request_url = request_url.replace(' ', '')
+
 	root_folder = git.rev_parse('--show-toplevel')
 	documentation_path = request_url[25:]
 
