@@ -45,7 +45,30 @@ def fix_learn_link(text, link):
 	if hash_index != -1:
 		request_url = request_url[:hash_index]
 
-	translated_path = '%s/docs/%s.md' % (git.rev_parse('--show-toplevel'), request_url[26:-5].replace('/en/', language_path))
+	if link.find('https://learn.liferay.com/reference/') == 0:
+		return '[%s](%s)' % (text, 'https://resources.learn.liferay.com' + request_url[25:])
+
+	root_folder = git.rev_parse('--show-toplevel')
+	documentation_path = request_url[25:]
+
+	if documentation_path[-5:] == '.html':
+		documentation_path = documentation_path[:-5]
+
+	if documentation_path[-3:] == '.md':
+		documentation_path = documentation_path[:-3]
+
+	if documentation_path.find('/latest/') == -1:
+		if documentation_path[:4] == '/en/' or documentation_path[:4] == '/ja/' or documentation_path[:4] == '/ko/':
+			documentation_path = documentation_path[3:]
+
+		if documentation_path[:3] == '/w/':
+			documentation_path = documentation_path[2:]
+
+		relative_path_index = documentation_path.find('/', 1)
+		relative_path = '%s/latest%s%s' % (documentation_path[:relative_path_index], language_path, documentation_path[relative_path_index+1:])
+		translated_path = '%s/docs%s.md' % (root_folder, relative_path)
+	else:
+		translated_path = '%s/docs%s.md' % (root_folder, documentation_path.replace('/en/', language_path))
 
 	if os.path.isfile(translated_path):
 		text_tl = extract_title_from_md(translated_path)
@@ -60,14 +83,14 @@ def fix_learn_link(text, link):
 	status_code = -1
 
 	try:
-		r = requests.get(request_url)
+		r = requests.get(request_url, headers={'user-agent': 'Python'})
 		status_code = r.status_code
 	except:
 		pass
 
 	if status_code != 200:
 		missing_translations.add(request_url)
-		print('unexpected status code %d: %s' % (status_code, request_url))
+		print('missing translation to %s: %s\n - not present at %s\n - unexpected status code %d at %s)' % (language, request_url, translated_path, status_code, request_url))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	content_en = None
@@ -76,16 +99,18 @@ def fix_learn_link(text, link):
 		r.encoding = r.apparent_encoding
 		content_en = r.text
 
-	if request_url.find('https://learn.liferay.com/en/') == 0:
-		link_tl = 'https://learn.liferay.com/%s/%s' % (language, request_url[request_url.find('/', 26)+1:])
-	else:
+	if request_url.find('/en/') != -1:
+		link_tl = request_url.replace('/en/', language_path)
+	elif request_url.find('https://resources.learn.liferay.com/') != 0:
 		link_tl = 'https://learn.liferay.com/%s/%s' % (language, request_url[26:])
+	else:
+		link_tl = 'https://learn.liferay.com' + language_path + request_url[26:]
 
-	r = requests.get(link_tl)
+	r = requests.get(link_tl, headers={'user-agent': 'Python'})
 
 	if r.status_code != 200:
 		missing_translations.add(request_url)
-		print('missing translation to %s: %s' % (language, request_url))
+		print('missing translation to %s: %s\n - not present at %s\n - not accessible at %s)' % (language, request_url, translated_path, link_tl))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	if content_en is None:
