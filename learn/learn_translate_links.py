@@ -15,7 +15,10 @@ def fix_learn_code(line):
 	pos0 = line.find('https://learn.liferay.com/')
 
 	while pos0 != -1:
-		pos1 = line.find(' ', pos0)
+		pos1 = line.find(')', pos0)
+
+		if pos1 == -1:
+			pos1 = line.find(' ', pos0)
 
 		if pos1 == -1:
 			pos1 = len(line)
@@ -38,7 +41,12 @@ def fix_learn_link(text, link):
 	if link.find('https://learn.liferay.com/') != 0:
 		return link
 
-	request_url = link
+	request_url = link.strip()
+
+	query_index = request_url.find('?')
+
+	if query_index != -1:
+		request_url = request_url[:query_index]
 
 	hash_index = request_url.find('#')
 
@@ -61,6 +69,9 @@ def fix_learn_link(text, link):
 		if documentation_path[:4] == '/en/' or documentation_path[:4] == '/ja/' or documentation_path[:4] == '/ko/':
 			documentation_path = documentation_path[3:]
 
+		if documentation_path[:11] == '/web/guest/':
+			documentation_path = documentation_path[10:]
+
 		if documentation_path[:3] == '/w/':
 			documentation_path = documentation_path[2:]
 
@@ -75,12 +86,24 @@ def fix_learn_link(text, link):
 		link_tl = link.replace('/en/', '/%s/' % language)
 		return '[%s](%s)' % (text_tl if text_tl is not None else text, link_tl) if text is not None else link
 
+	file_name_index = translated_path.rfind('/')
+	file_name = translated_path[file_name_index:translated_path.rfind('.')]
+
+	if translated_path[file_name_index-len(file_name):file_name_index] == file_name:
+		if os.path.isfile(translated_path[:file_name_index] + '.md'):
+			text_tl = extract_title_from_md(translated_path[:file_name_index] + '.md')
+			link_tl = link.replace('/en/', '/%s/' % language)
+			return '[%s](%s)' % (text_tl if text_tl is not None else text, link_tl) if text is not None else link
+
 	request_url = re.sub(learn_re, '\\1/en/', request_url)
 
 	if request_url in missing_translations:
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	status_code = -1
+
+	if request_url[-4:] == '.zip':
+		return '[%s](%s)' % (text, link)
 
 	try:
 		r = requests.get(request_url, headers={'user-agent': 'Python'})
@@ -90,7 +113,7 @@ def fix_learn_link(text, link):
 
 	if status_code != 200:
 		missing_translations.add(request_url)
-		print('missing translation to %s: %s\n - not present at %s\n - unexpected status code %d at %s)' % (language, request_url, translated_path, status_code, request_url))
+		print('missing original URL: %s\n - not present at %s\n - unexpected status code %d at %s' % (request_url, translated_path, status_code, request_url))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	content_en = None
@@ -110,7 +133,7 @@ def fix_learn_link(text, link):
 
 	if r.status_code != 200:
 		missing_translations.add(request_url)
-		print('missing translation to %s: %s\n - not present at %s\n - not accessible at %s)' % (language, request_url, translated_path, link_tl))
+		print('missing translation to %s: %s\n - not present at %s\n - not accessible at %s' % (language, request_url, translated_path, link_tl))
 		return '[%s](%s)' % (text, link) if text is not None else link
 
 	if content_en is None:
@@ -165,7 +188,7 @@ def translate_line_links(input_file, base_folder, line, has_toc_tree):
 			pos2 = line.find('](', pos2 + 2)
 			continue
 
-		pos3 = line.find(')', pos2 + 2)
+		pos3 = line.find(')', pos2)
 
 		if pos3 == -1:
 			return line
