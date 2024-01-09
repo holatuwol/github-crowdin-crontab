@@ -35,6 +35,12 @@ def fix_learn_code(line):
 
 missing_translations = set()
 
+def get_link_markdown(text, link):
+	if text is None or text == 'None':
+		return link
+
+	return '[%s](%s)' % (text, link)
+
 def fix_learn_link(text, link):
 	global missing_translations
 
@@ -54,7 +60,7 @@ def fix_learn_link(text, link):
 		request_url = request_url[:hash_index]
 
 	if link.find('https://learn.liferay.com/reference/') == 0:
-		return '[%s](%s)' % (text, 'https://resources.learn.liferay.com' + request_url[25:])
+		return get_link_markdown(text, 'https://resources.learn.liferay.com' + request_url[25:])
 
 	request_url = request_url.replace(' ', '')
 
@@ -86,7 +92,7 @@ def fix_learn_link(text, link):
 	if os.path.isfile(translated_path):
 		text_tl = extract_title_from_md(translated_path)
 		link_tl = link.replace('/en/', '/%s/' % language)
-		return '[%s](%s)' % (text_tl if text_tl is not None else text, link_tl) if text is not None else link
+		return get_link_markdown(text_tl if text_tl is not None else text, link_tl)
 
 	file_name_index = translated_path.rfind('/')
 	file_name = translated_path[file_name_index:translated_path.rfind('.')]
@@ -95,17 +101,17 @@ def fix_learn_link(text, link):
 		if os.path.isfile(translated_path[:file_name_index] + '.md'):
 			text_tl = extract_title_from_md(translated_path[:file_name_index] + '.md')
 			link_tl = link.replace('/en/', '/%s/' % language)
-			return '[%s](%s)' % (text_tl if text_tl is not None else text, link_tl) if text is not None else link
+			return get_link_markdown(text_tl if text_tl is not None else text, link_tl)
 
 	request_url = re.sub(learn_re, '\\1/en/', request_url)
 
 	if request_url in missing_translations:
-		return '[%s](%s)' % (text, link) if text is not None else link
+		return get_link_markdown(text, link)
 
 	status_code = -1
 
 	if request_url[-4:] == '.zip':
-		return '[%s](%s)' % (text, link)
+		return get_link_markdown(text, link)
 
 	try:
 		r = requests.get(request_url, headers={'user-agent': 'Python'})
@@ -120,7 +126,7 @@ def fix_learn_link(text, link):
 	if status_code != 200:
 		missing_translations.add(request_url)
 		print('missing original URL: %s\n - not present at %s\n - unexpected status code %d at %s' % (request_url, translated_path, status_code, request_url))
-		return '[%s](%s)' % (text, link) if text is not None else link
+		return get_link_markdown(text, link)
 
 	content_en = None
 
@@ -140,10 +146,10 @@ def fix_learn_link(text, link):
 	if r.status_code != 200:
 		missing_translations.add(request_url)
 		print('missing translation to %s: %s\n - not present at %s\n - not accessible at %s' % (language, request_url, translated_path, link_tl))
-		return '[%s](%s)' % (text, link) if text is not None else link
+		return get_link_markdown(text, link)
 
 	if content_en is None:
-		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
+		return get_link_markdown(text, link_tl)
 
 	content_tl = None
 
@@ -154,23 +160,23 @@ def fix_learn_link(text, link):
 	pos0 = content_en.find('<h1>')
 
 	if pos0 == -1:
-		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
+		return get_link_markdown(text, link_tl)
 
 	pos1 = content_en.find('<', pos0 + 4)
 
 	if text != content_en[pos0+4:pos1]:
-		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
+		return get_link_markdown(text, link_tl)
 
 	pos0 = content_tl.find('<h1>')
 
 	if pos0 == -1:
-		return '[%s](%s)' % (text, link_tl) if text is not None else link_tl
+		return get_link_markdown(text, link_tl)
 
 	pos1 = content_tl.find('<', pos0 + 4)
 
 	text_tl = content_tl[pos0+4:pos1]
 
-	return '[%s](%s)' % (text_tl, link_tl) if text is not None else link_tl
+	return get_link_markdown(text_tl, link_tl)
 
 def fix_help_center_link(text, link):
 	if link.find('https://help.liferay.com/hc/') != 0:
