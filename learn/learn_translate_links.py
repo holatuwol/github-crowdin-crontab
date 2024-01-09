@@ -109,6 +109,10 @@ def fix_learn_link(text, link):
 
 	try:
 		r = requests.get(request_url, headers={'user-agent': 'Python'})
+
+		if r.history and r.status_code == 200:
+			return fix_learn_link(text, r.url)
+
 		status_code = r.status_code
 	except:
 		pass
