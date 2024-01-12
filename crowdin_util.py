@@ -3,6 +3,7 @@ import git
 import json
 import logging
 import os
+import pickle
 import random
 import requests
 from scrape_liferay import authenticate, session
@@ -92,6 +93,9 @@ def crowdin_http_request(repository, path, method, **data):
         }
 
         r = session.post('https://accounts.crowdin.com/remember-me/decline', data=login_data)
+
+    with open('session.ser', 'wb') as f:
+        pickle.dump(session, f)
 
     return crowdin_http_request(repository, path, method, **data)
 
