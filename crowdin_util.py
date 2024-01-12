@@ -58,7 +58,7 @@ def crowdin_http_request(repository, path, method, **data):
         return crowdin_http_request(repository, path, method, **data)
     
     login_data = {
-        'email_or_login': git.config_prompt('crowdin.login', 'https://crowdin.com/settings#account "Email"'),
+        'email_or_login': git.config_prompt('crowdin.login', 'https://crowdin.com/settings#account "Username"'),
         'password': git.config_prompt('crowdin.password', 'https://crowdin.com/settings#password "Password"'),
         'hash': 'files',
         'continue': url,
@@ -68,6 +68,20 @@ def crowdin_http_request(repository, path, method, **data):
     }
 
     r = session.post(login_url, data=login_data)
+
+    while r.text.find('resend_device_verification_code') != -1:
+        soup = BeautifulSoup(r.text, features='html.parser')
+        token_input = soup.find('input', attrs={'name': '_token'})
+
+        login_data = {
+            'continue': path,
+            'locale': 'en',
+            'intended': '/auth/token',
+            '_token': token_input.attrs['value'],
+            'verification_code': input('verification code: ')
+        }
+
+        r = session.post('https://accounts.crowdin.com/device-verify/code', data=login_data)
 
     if r.text.find('/remember-me/decline') != -1:
         soup = BeautifulSoup(r.text, features='html.parser')
