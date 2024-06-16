@@ -6,11 +6,13 @@ import inspect
 import json
 import logging
 import math
+from onepassword import OnePassword
 import os
 import pandas as pd
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))) 
+script_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+sys.path.insert(0, os.path.dirname(script_folder))
 
 from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
 from crowdin_sync import get_repository_state, update_repository
@@ -18,6 +20,9 @@ from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk, disclaimer_ze
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
 import git
 from repository import initial_dir
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(script_folder)), 'liferay-faster-deploy/patcher'))
+
 from scrape_liferay import authenticate, session
 
 def set_default_parameter(parameters, name, default_value):
@@ -27,10 +32,20 @@ def set_default_parameter(parameters, name, default_value):
 def get_article_id(file):
     return file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
 
+bearer_configs = {
+	domain: git.config('1password.%s' % domain)
+		for domain in ['liferay-support.zendesk.com', 'liferaysupport1528999723.zendesk.com']
+}
+
+bearer_tokens = {
+	domain: OnePassword.get_item(uuid="'%s'" % config, fields='credential')['credential']
+		for domain, config in bearer_configs.items() if config is not None and config != ''
+}
+
 def zendesk_json_request(domain, api_path, attribute_name, request_type, json_params):
     auth_headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer %s' % git.config('%s.token' % domain)
+        'Authorization': 'Bearer %s' % bearer_tokens[domain]
     }
 
     url = 'https://%s/api/v2%s' % (domain, api_path)

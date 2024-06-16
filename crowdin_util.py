@@ -1,78 +1,86 @@
 from bs4 import BeautifulSoup
 import git
+from http.client import HTTPConnection
+import inspect
 import json
 import logging
+from onepassword import OnePassword
 import os
 import pickle
 import random
 import requests
-from scrape_liferay import authenticate, session
+import sys
 import urllib
 
-csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
-invalid_session = False
+script_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+patcher_scripts_folder = os.path.join(os.path.dirname(script_folder), 'liferay-faster-deploy/patcher')
+print(patcher_scripts_folder)
 
-def crowdin_http_request(repository, path, method, **data):
-    global csrf_token, invalid_session
+sys.path.insert(0, patcher_scripts_folder)
 
-    if method == 'GET':
-        get_data = { key: value for key, value in data.items() }
+from scrape_liferay import session
 
-        get_data['project_id'] = repository.crowdin.project_id
-        get_data['target_language_id'] = '25'
+# Retrieve information from 1password
 
-        query_string = '&'.join([urllib.parse.quote(key) + '=' + urllib.parse.quote(str(value)) for key, value in get_data.items()])
-        
-        url = 'https://crowdin.com%s?%s' % (path, query_string)
-    else:
-        url = 'https://crowdin.com%s' % path
+crowdin_config = git.config('1password.crowdin')
 
-    session.cookies.set('csrf_token', csrf_token, domain='.crowdin.com', path='/')
+if crowdin_config is None:
+    username = input('https://crowdin.com/settings#account "Username"')
+    password = input('https://crowdin.com/settings#password "Password"')
+else:
+    username = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='username')['username']
+    password = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='password')['password']
 
-    try:
-        if method == 'GET':
-            r = session.get(url, headers={'x-csrf-token': csrf_token})
-        elif method == 'POST':
-            r = session.post(url, data=data, headers={'x-csrf-token': csrf_token})
+if username[0] == '"' and username[-1] == '"':
+    username = username[1:-1]
 
-        if r.url.find('/login') == -1:
-            return r.content
-    except:
-        pass
+if password[0] == '"' and password[-1] == '"':
+    password = password[1:-1]
 
-    if invalid_session:
-        git.config('--global', '--unset', 'crowdin.login')
-        git.config('--global', '--unset', 'crowdin.password')
-    else:
-        logging.info('Session timed out, refreshing session')
-        invalid_session = True
+crowdin_config = git.config('1password.crowdin-api-v2')
 
-    continue_url = 'https://crowdin.com/%s/settings' % repository.crowdin.project_name
+if crowdin_config is None:
+    bearer_token = input('https://crowdin.com/settings#api-key "Account API key"')
+else:
+    bearer_token = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='credential')['credential']
+
+# Generate a random CSRF token
+
+x_csrf_token = ''.join([random.choice('0123456789abcdefghijklmnopqrstuvwxyz') for x in range(10)])
+session.cookies.set('csrf_token', x_csrf_token, domain='crowdin.com', path='/')
+
+def crowdin_authenticate(path):
     login_url = 'https://accounts.crowdin.com/login'
 
     r = session.get(login_url)
-    
+
     soup = BeautifulSoup(r.text, features='html.parser')
+
     token_input = soup.find('input', attrs={'name': '_token'})
-    
+
     if token_input is None:
-        return crowdin_http_request(repository, path, method, **data)
-    
+        return True
+
+    csrf_token = token_input.attrs['value']
+
     login_data = {
-        'email_or_login': git.config_prompt('crowdin.login', 'https://crowdin.com/settings#account "Username"'),
-        'password': git.config_prompt('crowdin.password', 'https://crowdin.com/settings#password "Password"'),
-        'hash': 'files',
-        'continue': url,
+        'email_or_login': username,
+        'password': password,
+        'continue': path,
+        'domain': '',
         'locale': 'en',
         'intended': '/auth/token',
-        '_token': token_input.attrs['value']
+        '_token': csrf_token
     }
 
     r = session.post(login_url, data=login_data)
 
     while r.text.find('resend_device_verification_code') != -1:
         soup = BeautifulSoup(r.text, features='html.parser')
+
         token_input = soup.find('input', attrs={'name': '_token'})
+        csrf_token = token_input.attrs['value']
+        session.cookies.set('CSRF-TOKEN', csrf_token, domain='crowdin.com', path='/')
 
         login_data = {
             'continue': path,
@@ -82,20 +90,55 @@ def crowdin_http_request(repository, path, method, **data):
             'verification_code': input('verification code: ')
         }
 
-        r = session.post('https://accounts.crowdin.com/device-verify/code', data=login_data)
+        r = session.post('https://accounts.crowdin.com/device-verify/code', data=login_data, headers={'x-csrf-token': x_csrf_token})
 
     if r.text.find('/remember-me/decline') != -1:
         soup = BeautifulSoup(r.text, features='html.parser')
+
         token_input = soup.find('input', attrs={'name': '_token'})
+        csrf_token = token_input.attrs['value']
+        session.cookies.set('CSRF-TOKEN', csrf_token, domain='crowdin.com', path='/')
 
         login_data = {
             '_token': token_input.attrs['value']
         }
 
-        r = session.post('https://accounts.crowdin.com/remember-me/decline', data=login_data)
+        r = session.post('https://accounts.crowdin.com/remember-me/decline', data=login_data, headers={'x-csrf-token': x_csrf_token})
 
     with open('session.ser', 'wb') as f:
         pickle.dump(session, f)
+
+    return True
+
+def crowdin_http_request(repository, path, method, **data):
+    if method == 'GET':
+        get_data = { key: value for key, value in data.items() }
+
+        if repository is not None:
+            get_data['project_id'] = repository.crowdin.project_id
+            get_data['target_language_id'] = '25'
+
+        query_string = '&'.join([urllib.parse.quote(key) + '=' + urllib.parse.quote(str(value)) for key, value in get_data.items()])
+
+        url = 'https://crowdin.com%s?%s' % (path, query_string)
+    else:
+        url = 'https://crowdin.com%s' % path
+
+    try:
+        if method == 'GET':
+            print('GET %s' % url)
+            r = session.get(url, headers={'x-csrf-token': x_csrf_token})
+        elif method == 'POST':
+            print('POST %s' % url)
+            r = session.post(url, data=data, headers={'x-csrf-token': x_csrf_token})
+
+        if r.url.find('/login') == -1:
+            return r.content
+    except:
+        print('exception')
+        pass
+
+    crowdin_authenticate(path)
 
     return crowdin_http_request(repository, path, method, **data)
 
@@ -115,7 +158,7 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
 
     headers = {
         'user-agent': 'python',
-        'authorization': 'Bearer %s' % git.config_prompt('crowdin.account-key-v2', 'https://crowdin.com/settings#api-key "Account API key"')
+        'authorization': 'Bearer %s' % bearer_token
     }
 
     if user_id is None and api_path != '/user':
@@ -137,8 +180,6 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
 
     if r.status_code == 401:
         logging.error('Invalid user name or password')
-
-        git.config('--global', '--unset', 'crowdin.account-key-v2')
 
         return crowdin_request(api_path, method, data, files)
 
@@ -178,7 +219,7 @@ def upload_file_to_crowdin_storage(file_path):
         'user-agent': 'python',
         'content-type': 'application/octet-stream',
         'Crowdin-API-FileName': os.path.basename(file_path),
-        'authorization': 'Bearer %s' % git.config_prompt('crowdin.account-key-v2', 'https://crowdin.com/settings#api-key "Account API key"')
+        'authorization': 'Bearer %s' % bearer_token
     }
 
     if user_id is None:
@@ -192,8 +233,6 @@ def upload_file_to_crowdin_storage(file_path):
 
     if r.status_code == 401:
         logging.error('Invalid user name or password')
-
-        git.config('--global', '--unset', 'crowdin.account-key-v2')
 
         return crowdin_request(api_path, 'GET', {}, files)
 
@@ -270,3 +309,6 @@ def get_crowdin_file_info(repository, target_language):
         pagination_data['offset'] = pagination_data['offset'] + 500
 
     return file_info
+
+#HTTPConnection.debuglevel = 1
+crowdin_authenticate('/profile')
