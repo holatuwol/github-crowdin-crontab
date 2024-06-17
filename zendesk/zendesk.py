@@ -260,14 +260,21 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
     article_paths = check_renamed_articles(repository, source_language, target_language, articles, section_paths)
 
-    updated_source_files = [
-        article_paths[article_id]
-            for article_id, article in articles.items()
-    ]
+    if os.path.exists('check_only_articles.txt'):
+        with open('check_only_articles.txt', 'r') as f:
+            updated_source_files = [
+                article_paths[line.strip()]
+                    for line in f.readlines()
+            ]
+    else:
+        updated_source_files = [
+            article_paths[article_id]
+                for article_id, article in articles.items()
+        ]
 
     updated_target_files = [
-        get_translation_path(file, source_language, target_language)
-            for file in updated_source_files
+        get_translation_path(source_file, source_language, target_language)
+            for source_file in updated_source_files
     ]
 
     missing_target_language_article_ids = [article['id'] for article in articles.values() if target_language not in article['label_names']]
@@ -278,9 +285,9 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
     os.chdir(repository.github.git_root)
 
-    for article_id, file in sorted(article_paths.items()):
+    for article_id, source_file in sorted(article_paths.items()):
         article = articles[article_id]
-        target_file = get_translation_path(file, source_language, target_language)
+        target_file = get_translation_path(source_file, source_language, target_language)
 
         if target_language in article['label_names'] and target_file not in updated_target_files:
             continue
@@ -289,7 +296,7 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
             if authors is not None:
                 logging.info('%s (updating since author is included)' % article_id)
 
-            update_zendesk_translation(repository, domain, article, file, source_language, target_language)
+            update_zendesk_translation(repository, domain, article, source_file, target_file, source_language, target_language)
         else:
             logging.info('%s (skipping since author is excluded)' % article_id)
 
@@ -345,8 +352,8 @@ def check_renamed_articles(repository, source_language, target_language, article
         target_language_path = target_language[:target_language.find('-')]
 
     old_article_paths = {
-        get_article_id(file): file
-             for file in git.ls_files(source_language_path + '/').split('\n')
+        get_article_id(source_file): source_file
+             for source_file in git.ls_files(source_language_path + '/').split('\n')
     }
 
     new_article_paths = {
@@ -356,8 +363,8 @@ def check_renamed_articles(repository, source_language, target_language, article
     }
 
     old_translated_paths = {
-        get_article_id(file): file
-             for file in git.ls_files(target_language_path + '/').split('\n')
+        get_article_id(target_file): target_file
+             for target_file in git.ls_files(target_language_path + '/').split('\n')
     }
 
     new_translated_paths = {
@@ -535,11 +542,18 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
 
     # Check if anything appears to be out of date
 
-    refresh_articles = {
-        article_id: article
-            for article_id, article in sorted(articles.items())
-                if requires_update(repository, domain, article, source_language, target_language, article_paths[article_id], fetch_update)
-    }
+    if os.path.exists(os.path.join(old_dir, 'check_only_articles.txt')):
+        with open(os.path.join(old_dir, 'check_only_articles.txt'), 'r') as f:
+            refresh_articles = {
+                line.strip(): articles[line.strip()]
+                    for line in f.readlines()
+            }
+    else:
+        refresh_articles = {
+            article_id: article
+                for article_id, article in sorted(articles.items())
+                    if requires_update(repository, domain, article, source_language, target_language, article_paths[article_id], None, fetch_update)
+        }
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
@@ -613,7 +627,7 @@ def remove_nbsp(content):
 
     return new_content
 
-def requires_update(repository, domain, article, source_language, target_language, file, fetch_update):
+def requires_update(repository, domain, article, source_language, target_language, source_file, target_file, fetch_update):
     # check if machine translation is needed
 
     if target_language not in article['label_names']:
@@ -626,13 +640,15 @@ def requires_update(repository, domain, article, source_language, target_languag
 
     # check if it's a new file
 
-    if not os.path.isfile(file):
+    if not os.path.isfile(source_file):
         logging.info('%s (requires update check: new source file)' % article['id'])
         return True
 
     # check if a translation is missing
 
-    target_file = get_translation_path(file, source_language, target_language)
+    if target_file is None:
+        target_file = get_translation_path(source_file, source_language, target_language)
+
     target_path = '%s/%s' % (repository.github.git_root, target_file)
 
     if not os.path.exists(target_path):
@@ -641,7 +657,7 @@ def requires_update(repository, domain, article, source_language, target_languag
 
     # check if the source target_language was changed
 
-    with open(file, 'r') as f:
+    with open(source_file, 'r') as f:
         old_content = ''.join(f.readlines()).strip()
 
     new_content = '<h1>%s</h1>\n%s' % (article['title'], remove_nbsp(article['body']))
@@ -675,11 +691,9 @@ def requires_update(repository, domain, article, source_language, target_languag
     logging.info('%s (requires update check: no update required)' % article['id'])
     return False
 
-def update_zendesk_translation(repository, domain, article, file, source_language, target_language):
-    target_file = get_translation_path(file, source_language, target_language)
-
+def update_zendesk_translation(repository, domain, article, source_file, target_file, source_language, target_language):
     if not os.path.exists(target_file):
-        print('%s (skipping translation, not available on file system)' % article['id'])
+        print('%s (skipping translation, not available on file system %s)' % (article['id'], target_file))
         return False
 
     if target_language in article['label_names'] and 'mt' not in article['label_names']:
@@ -720,8 +734,8 @@ def update_zendesk_translation(repository, domain, article, file, source_languag
 
     # Check if the translation needs an update
 
-    if not requires_update(repository, domain, article, source_language, target_language, file, True):
-        logging.info('%s (skipping translation, file is up to date)' % article['id'])
+    if not requires_update(repository, domain, article, source_language, target_language, source_file, target_file, True):
+        logging.info('%s (skipping translation, file is up to date %s)' % (article['id'], target_file))
         return False
 
     new_title, old_content, new_content = add_disclaimer_zendesk(article, target_file, target_language)
