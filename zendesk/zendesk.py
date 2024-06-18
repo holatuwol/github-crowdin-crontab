@@ -688,7 +688,12 @@ def requires_update(repository, domain, article, source_language, target_languag
             logging.info('%s (requires update check: missing MT disclaimer)' % article['id'])
             return True
 
-    logging.info('%s (requires update check: no update required)' % article['id'])
+        if mt_article['body'] != new_content:
+            logging.info('%s (requires update check: mismatched translated content)' % article['id'])
+            return True
+
+    logging.info('(requires update check %s: no update required %s)' % (article['id'], target_file))
+
     return False
 
 def update_zendesk_translation(repository, domain, article, source_file, target_file, source_language, target_language):
