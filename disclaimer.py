@@ -53,7 +53,7 @@ def add_disclaimer_zendesk(article, file, language):
     with open(file, 'r') as f:
         lines = f.readlines()
 
-    new_title = lines[0][4:-6]
+    new_title = lines[0][4:-6] if len(lines[0]) > 1 else lines[1][4:]
     old_content = ''.join(lines[1:]).strip()
 
     if lines[1].strip() == '<p class="alert alert-info"><span class="wysiwyg-color-blue120">':

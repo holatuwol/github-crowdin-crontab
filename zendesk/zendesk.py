@@ -12,6 +12,11 @@ import pandas as pd
 import sys
 
 script_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+
+sys.path.insert(0, script_folder)
+
+from fix_untranslated import retranslate_ja_to_en
+
 sys.path.insert(0, os.path.dirname(script_folder))
 
 from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
@@ -66,6 +71,9 @@ def zendesk_json_request(domain, api_path, attribute_name, request_type, json_pa
     except:
         print('%d, %s' % (r.status_code, r.text))
         return None
+
+    if attribute_name is None:
+        return api_result
 
     if attribute_name in api_result:
         return api_result[attribute_name]
@@ -191,6 +199,47 @@ def get_new_articles(domain):
 
     return all_articles
 
+def fix_author_source_locale(repository, domain, bad_language, good_language, author_id):
+    bad_articles = None
+
+    if os.path.exists('check_only_articles.txt'):
+        with open('check_only_articles.txt', 'r') as f:
+            fix_articles = [
+                line.strip() for line in f.readlines()
+            ]
+    else:
+        with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, bad_language, domain), 'r') as f:
+            bad_articles = json.load(f)
+
+        fix_articles = [
+            article_id for article_id, article in bad_articles.items()
+                if article['author_id'] == author_id
+        ]
+
+    if len(fix_articles) == 0:
+        return
+
+    for article_id in fix_articles:
+        try:
+            api_path = '/help_center/%s/articles/%s/source_locale.json' % (bad_language, article_id)
+
+            json_params = {
+                'article_locale': good_language
+            }
+            print(json_params)
+
+            logging.info('Fixing article locale %s' % article_id)
+            zendesk_json_request(domain, api_path, None, 'PUT', json_params)
+
+            if bad_articles is not None:
+                del bad_articles[article_id]
+        except:
+            logging.error('Unexpected error fixing article locale %s' % article_id)
+
+    if bad_articles is not None:
+        with open('%s/zendesk/articles_%s_%s.json' % (initial_dir, bad_language, domain), 'w') as f:
+            json.dump(bad_articles, f)
+
 def get_zendesk_articles(repository, domain, source_language, target_language, fetch_update):
     user = init_zendesk(domain)
     logging.info('Authenticated as %s' % user['email'])
@@ -294,11 +343,11 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
         if authors is None or str(article['author_id']) in authors:
             if authors is not None:
-                logging.info('%s (updating since author is included)' % article_id)
+                logging.info('%s (updating since author %s is included)' % (article_id, article['author_id']))
 
             update_zendesk_translation(repository, domain, article, source_file, target_file, source_language, target_language)
         else:
-            logging.info('%s (skipping since author is excluded)' % article_id)
+            logging.info('%s (skipping since author %s is excluded)' % (article_id, article['author_id']))
 
     os.chdir(old_dir)
 
@@ -326,6 +375,9 @@ def copy_zendesk_to_crowdin(repository, domain, source_language, target_language
 
     old_dir = os.getcwd()
     os.chdir(repository.github.git_root)
+
+    if source_language == 'ja' and target_language == 'en-us':
+        refresh_paths.update(retranslate_ja_to_en())
 
     if len(refresh_paths) > 0:
         print('Uploading %d files to crowdin...' % len(refresh_paths))

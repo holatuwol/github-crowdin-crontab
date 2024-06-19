@@ -179,11 +179,11 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     before_upload = get_crowdin_file_info(repository, target_language)
 
     for file in new_files:
-        git.checkout(file)
-
         extension = file[file.rfind('.'):]
 
         if extension == '.md' or extension == '.markdown':
+            git.checkout(file)
+
             _pandoc(file, file, '--from=gfm', '--to=gfm', '--wrap=none')
 
             fix_product_name_tokens(file)

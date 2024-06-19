@@ -1,47 +1,62 @@
 #!/bin/bash
 
+SCRIPT_FOLDER=$(dirname ${BASH_SOURCE[0]})
+
 echo "Building docker image"
-docker build /ephemeral/crowdin/github-crowdin-crontab/docker -t crowdin
+docker build ${SCRIPT_FOLDER}/docker -t holatuwol/crowdin-translate
 
 echo "Starting docker container"
 docker kill crowdin
 docker rm -v crowdin
 
-docker run --name crowdin \
---volume /ephemeral/crowdin:/home/jovyan/crowdin \
---detach crowdin start-notebook.sh --NotebookApp.token=''
+REPOSITORY_FOLDER=$(dirname ${SCRIPT_FOLDER})
 
-echo "Preparing system credentials"
-docker exec crowdin mkdir -p /home/jovyan/.ssh/
+# docker run --name crowdin \
+# $(echo 'github-crowdin-crontab' 'zendesk-articles' 'zendesk-articles-ja' | tr ' ' '\n' | awk '{ print "--volume '${REPOSITORY_FOLDER}'/" $1 "/:/home/jovyan/work/crowdin/" $1 "/" }') \
+# --detach holatuwol/crowdin-translate start-notebook.sh --NotebookApp.token=''
 
-docker cp ${HOME}/.ssh/id_rsa crowdin:/home/jovyan/.ssh/
-docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa
+# echo "Preparing system credentials"
+# docker exec crowdin mkdir -p /home/jovyan/.ssh/
 
-docker cp ${HOME}/.ssh/id_rsa.pub crowdin:/home/jovyan/.ssh/
-docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa.pub
+# docker cp ${HOME}/.ssh/id_rsa crowdin:/home/jovyan/.ssh/
+# docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa
 
-docker exec -t crowdin ls /home/jovyan/.ssh/
-
-for config in $(git config --list | cut -d'=' -f 1); do
-	docker exec crowdin /bin/bash -c "git config --global ${config} '$(git config ${config})'"
-done
+# docker cp ${HOME}/.ssh/id_rsa.pub crowdin:/home/jovyan/.ssh/
+# docker exec -u root crowdin chown jovyan:users /home/jovyan/.ssh/id_rsa.pub
 
 echo "Fetching new articles and preparing translations"
 
 EN_JA_TRANSLATION=
-EN_JA_TRANSLATION=$(echo update crowdin translate zendesk | tr ' ' '\n' | awk '{ print "python cronjob.py zendesk-articles " $1 " ja;" }' | tr '\n' ' ')
+# EN_JA_TRANSLATION=$(
+# echo update crowdin translate zendesk | tr ' ' '\n' | \
+# 	awk '{ print "python cronjob.py zendesk-articles " $1 " ja;" }' | tr '\n' ' '
+# )
 
 JA_EN_TRANSLATION=
-JA_EN_TRANSLATION=$(echo update crowdin translate zendesk | tr ' ' '\n' | awk '{ print "python cronjob.py zendesk-articles-ja " $1 " en-us;" }' | tr '\n' ' ')
+JA_EN_TRANSLATION=$(
+echo update crowdin translate zendesk | tr ' ' '\n' | \
+	awk '{ print "python cronjob.py zendesk-articles-ja " $1 " en-us;" }' | tr '\n' ' '
+)
 
-docker exec -t crowdin /bin/bash -c "cd crowdin/github-crowdin-crontab; ${EN_JA_TRANSLATION} ${JA_EN_TRANSLATION}"
+if [ "" != "${EN_JA_TRANSLATION}" ]; then
+	bash -c "${EN_JA_TRANSLATION}"
+fi
 
-echo "Cleaning up docker containers"
+if [ "" != "${JA_EN_TRANSLATION}" ]; then
+	bash -c "${JA_EN_TRANSLATION}"
+fi
 
-docker stop crowdin
-docker rm -v crowdin
+# if [ "" != "${EN_JA_TRANSLATION}" ] || [ "" != "${JA_EN_TRANSLATION}" ]; then
+# 	docker exec -t crowdin /bin/bash -c \
+# 		"cd work/crowdin/github-crowdin-crontab; ${EN_JA_TRANSLATION} ${JA_EN_TRANSLATION}"
+# fi
 
-echo "Updating GitHub with new articles and translations"
+# echo "Cleaning up docker containers"
 
-cd /ephemeral/crowdin/zendesk-articles
+# docker stop crowdin
+# docker rm -v crowdin
+
+# echo "Updating GitHub with new articles and translations"
+
+cd ../zendesk-articles
 git push origin master

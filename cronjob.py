@@ -8,7 +8,7 @@ import pandas as pd
 from repository import get_repository, initial_dir
 import sys
 import time
-from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, download_zendesk_articles, translate_zendesk_on_crowdin
+from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, download_zendesk_articles, fix_author_source_locale, translate_zendesk_on_crowdin
 
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
@@ -138,8 +138,35 @@ def execute_job(domain, git_repository, direction, target_language):
         if value == 'y':
             update_repository(repository, sync_sources=sync_sources)
 
+def fix_locale(domain, git_repository, bad_language, good_language, author_id):
+    all_repositories = get_repositories(False)
+
+    check_repositories = []
+
+    for repository in all_repositories:
+        if repository is None:
+            continue
+
+        git_root = repository.github.git_root
+
+        if git_root[git_root.rfind('/')+1:] != git_repository:
+            continue
+
+        check_repositories.append(repository)
+
+    if len(check_repositories) != 1:
+        list_jobs()
+        return
+
+    repository = check_repositories[0]
+
+    fix_author_source_locale(repository, domain, bad_language, good_language, author_id)
+
 if __name__ == '__main__':
+    print(sys.argv)
     if len(sys.argv) < 4:
         list_jobs()
+    elif sys.argv[2] == 'locale':
+        fix_locale(prod_domain, sys.argv[1], sys.argv[3], sys.argv[4], int(sys.argv[5]))
     else:
         execute_job(prod_domain, sys.argv[1], sys.argv[2], sys.argv[3])
