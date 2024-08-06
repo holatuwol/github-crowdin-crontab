@@ -2,7 +2,6 @@ from crowdin import crowdin_download_translations, crowdin_upload_sources, fix_p
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders, get_translation_path
 import git
-from github import get_milestone_map, get_milestone_numbers, init_issues, update_translation_issues
 import logging
 import os
 import re

@@ -1,8 +1,6 @@
 from crowdin_sync import update_repository
 from crowdin_util import crowdin_request
-from github import is_repository_accessible
 import json
-from liferay_learn import add_disclaimers_to_learn, copy_crowdin_to_learn, copy_learn_to_crowdin
 import os
 import pandas as pd
 from repository import get_repository, initial_dir
@@ -13,11 +11,10 @@ from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, do
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
 
-def get_repositories(check_accessible=True):
+def get_repositories():
     projects = []
 
     repositories_df = pd.read_csv('%s/repositories.csv' % initial_dir, comment='#')
-    repositories_df.fillna('', inplace=True)
 
     for project_id in repositories_df['project_id'].unique():
         status_code, response_data = crowdin_request('/projects/%s' % project_id, 'GET')
@@ -25,15 +22,10 @@ def get_repositories(check_accessible=True):
 
     repositories = [get_repository(projects, **x) for x in repositories_df.to_dict('records')]
 
-    if check_accessible:
-        for git_repository, crowdin_repository in repositories:
-            assert(is_repository_accessible(git_repository.origin))
-            assert(is_repository_accessible(git_repository.upstream))
-
     return repositories
 
 def list_jobs():
-    all_repositories = get_repositories(False)
+    all_repositories = get_repositories()
 
     print()
     print('Valid commands:')
@@ -66,7 +58,7 @@ def list_jobs():
                 print('  python %s %s disclaimer %s' % (sys.argv[0], git_repository, target_language))
 
 def execute_job(domain, git_repository, direction, target_language):
-    all_repositories = get_repositories(False)
+    all_repositories = get_repositories()
 
     check_repositories = []
 
@@ -112,17 +104,6 @@ def execute_job(domain, git_repository, direction, target_language):
             copy_crowdin_to_zendesk(repository, domain, 'ja', 'en-us', authors)
         else:
             print('invalid target of zendesk sync (crowdin, zendesk)')
-    elif repository.github.upstream == 'liferay/liferay-learn':
-        print(repository)
-
-        if direction == 'upload':
-            copy_learn_to_crowdin(repository, target_language)
-        elif direction == 'download':
-            copy_crowdin_to_learn(repository, target_language)
-        elif direction == 'disclaimer':
-            add_disclaimers_to_learn(repository, target_language)
-        else:
-            print('invalid target of learn sync (upload, download, disclaimer)')
     else:
         if direction == 'upload':
             sync_sources = True
@@ -139,7 +120,7 @@ def execute_job(domain, git_repository, direction, target_language):
             update_repository(repository, sync_sources=sync_sources)
 
 def fix_locale(domain, git_repository, bad_language, good_language, author_id):
-    all_repositories = get_repositories(False)
+    all_repositories = get_repositories()
 
     check_repositories = []
 

@@ -1,10 +1,8 @@
 from bs4 import BeautifulSoup
-import git
 from http.client import HTTPConnection
 import inspect
 import json
 import logging
-from onepassword import OnePassword
 import os
 import pickle
 import random
@@ -12,13 +10,17 @@ import requests
 import sys
 import urllib
 
-script_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-patcher_scripts_folder = os.path.join(os.path.dirname(script_folder), 'liferay-faster-deploy/patcher')
-print(patcher_scripts_folder)
+script_root_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+faster_deploy_folder = os.path.join(os.path.dirname(script_root_folder), 'liferay-faster-deploy')
 
-sys.path.insert(0, patcher_scripts_folder)
+sys.path.insert(0, faster_deploy_folder)
 
-from scrape_liferay import session
+import git
+import onepass
+from patcher.scrape_liferay import session
+
+
+
 
 # Retrieve information from 1password
 
@@ -28,8 +30,8 @@ if crowdin_config is None:
     username = input('https://crowdin.com/settings#account "Username"')
     password = input('https://crowdin.com/settings#password "Password"')
 else:
-    username = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='username')['username']
-    password = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='password')['password']
+    username = onepass.item(crowdin_config, 'username')['username']
+    password = onepass.item(crowdin_config, 'password')['password']
 
 if username[0] == '"' and username[-1] == '"':
     username = username[1:-1]
@@ -42,7 +44,7 @@ crowdin_config = git.config('1password.crowdin-api-v2')
 if crowdin_config is None:
     bearer_token = input('https://crowdin.com/settings#api-key "Account API key"')
 else:
-    bearer_token = OnePassword.get_item(uuid="'%s'" % crowdin_config, fields='credential')['credential']
+    bearer_token = onepass.item(crowdin_config, 'credential')['credential']
 
 # Generate a random CSRF token
 
@@ -179,9 +181,8 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
         raise 'Unrecognized method: %s' % method
 
     if r.status_code == 401:
-        logging.error('Invalid user name or password')
-
-        return crowdin_request(api_path, method, data, files)
+        logging.error('Invalid bearer token, please update')
+        exit()
 
     if r.status_code >= 400:
         logging.error('HTTP Error: %s' % r.content)

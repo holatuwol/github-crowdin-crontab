@@ -6,29 +6,28 @@ import inspect
 import json
 import logging
 import math
-from onepassword import OnePassword
 import os
 import pandas as pd
 import sys
 
-script_folder = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+script_root_folder = os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
+faster_deploy_folder = os.path.join(os.path.dirname(script_root_folder), 'liferay-faster-deploy')
 
-sys.path.insert(0, script_folder)
-
-from fix_untranslated import retranslate_ja_to_en
-
-sys.path.insert(0, os.path.dirname(script_folder))
+sys.path.insert(0, script_root_folder)
+sys.path.insert(0, faster_deploy_folder)
 
 from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
 from crowdin_sync import get_repository_state, update_repository
 from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk, disclaimer_zendesk_text
 from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
 import git
+import onepass
+from patcher.scrape_liferay import authenticate, session
 from repository import initial_dir
+from zendesk.fix_untranslated import retranslate_ja_to_en
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(script_folder)), 'liferay-faster-deploy/patcher'))
 
-from scrape_liferay import authenticate, session
+
 
 def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
@@ -43,7 +42,7 @@ bearer_configs = {
 }
 
 bearer_tokens = {
-	domain: OnePassword.get_item(uuid="'%s'" % config, fields='credential')['credential']
+	domain: onepass.item(config, 'credential')['credential']
 		for domain, config in bearer_configs.items() if config is not None and config != ''
 }
 
