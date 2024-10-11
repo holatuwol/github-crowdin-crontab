@@ -312,4 +312,4 @@ def get_crowdin_file_info(repository, target_language):
     return file_info
 
 #HTTPConnection.debuglevel = 1
-crowdin_authenticate('/profile')
+#crowdin_authenticate('/profile')

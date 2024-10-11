@@ -1,3 +1,4 @@
 source_language,git_repository,git_branch,git_folder,project_id,project_name,project_folder,single_folder,delete_enabled
 en,zendesk-articles,master,en,420856,liferay-japan-documentation,zendesk,,TRUE
 en,zendesk-articles-ja,master,ja,428398,liferay-japan-gs,zendesk,,TRUE
+en,learn-xliff,master,en,420856,liferay-japan-documentation,learn.liferay.com,,TRUE

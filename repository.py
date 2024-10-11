@@ -2,6 +2,7 @@ from collections import namedtuple
 from inspect import getsourcefile
 import git
 import logging
+import math
 import os
 
 initial_dir = os.path.dirname(os.path.abspath(getsourcefile(lambda:0)))
@@ -22,7 +23,10 @@ TranslationRepository = namedtuple(
 )
 
 def get_repository(projects, source_language, git_repository, git_branch, git_folder, project_id, project_name, project_folder, single_folder, delete_enabled):
-    single_folder = single_folder.strip()
+    if single_folder is None or math.isnan(single_folder):
+        single_folder = ''
+    else:
+        single_folder = single_folder.strip()
 
     if len(single_folder) == 0:
         github_single_folder = None

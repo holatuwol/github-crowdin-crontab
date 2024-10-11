@@ -2,12 +2,12 @@
 
 SCRIPT_FOLDER=$(dirname ${BASH_SOURCE[0]})
 
-echo "Building docker image"
-docker build ${SCRIPT_FOLDER}/docker -t holatuwol/crowdin-translate
+# echo "Building docker image"
+# docker build ${SCRIPT_FOLDER}/docker -t holatuwol/crowdin-translate
 
-echo "Starting docker container"
-docker kill crowdin
-docker rm -v crowdin
+# echo "Starting docker container"
+# docker kill crowdin
+# docker rm -v crowdin
 
 REPOSITORY_FOLDER=$(dirname ${SCRIPT_FOLDER})
 

@@ -41,7 +41,11 @@ def process_phrases(repository, file_name, file_metadata, translation_filter, su
         repository, '/backend/phrases/load_preview', 'GET',
         file_id=file_id)
 
-    response_data = json.loads(response_content.decode('utf-8'))['data']
+    try:
+        response_data = json.loads(response_content.decode('utf-8'))['data']
+    except:
+        print(file_name, file_id, response_content)
+        return False
 
     translations_hidden = {
         entry['id']: entry['hidden'] == '1'

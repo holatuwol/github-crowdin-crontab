@@ -11,6 +11,8 @@ from zendesk.zendesk import copy_crowdin_to_zendesk, copy_zendesk_to_crowdin, do
 uat_domain = 'liferaysupport1528999723.zendesk.com'
 prod_domain = 'liferay-support.zendesk.com'
 
+print('initial_dir', initial_dir)
+
 def get_repositories():
     projects = []
 

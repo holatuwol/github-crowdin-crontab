@@ -1,4 +1,4 @@
-from crowdin import crowdin_download_translations, crowdin_upload_sources, fix_product_name_tokens, get_crowdin_file_info
+from crowdin import crowdin_download_translations, fix_product_name_tokens, get_crowdin_file_info
 from datetime import datetime
 from file_manager import get_crowdin_file, get_eligible_files, get_local_file, get_root_folders, get_translation_path
 import git
