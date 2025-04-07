@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from crowdin_util import crowdin_http_request, get_crowdin_file_info
+from crowdin_util import crowdin_request, get_crowdin_file_info
 import logging
 import json
 import os
@@ -14,239 +14,36 @@ logging.basicConfig(
 
 # Mass delete suggestions
 
-def show_translation(repository, translation_id):
-    crowdin_http_request(
-        repository, '/backend/translation/change_visibility', 'GET',
-        translation_id=translation_id, hidden=0)
+def show_translation(repository, project_id, string_id):
+    crowdin_request('/projects/%s/strings/%s' % (project_id, string_id), 'PATCH', [{'op': 'replace', 'path': '/isHidden', 'value': False}])
 
-def hide_translation(repository, translation_id):
-    crowdin_http_request(
-        repository, '/backend/translation/change_visibility', 'GET',
-        translation_id=translation_id, hidden=1)
-
-def process_phrases(repository, file_name, file_metadata, translation_filter, suggestion_filter):
-    file_id = file_metadata['id']
-
-    response_content = crowdin_http_request(
-        repository, '/backend/phrases/phrases_as_html', 'GET',
-        file_id=file_id)
-
-    soup = BeautifulSoup(response_content, features='html.parser')
-
-    translation_tags = [
-        tag for tag in soup.find_all(attrs={'class': 'crowdin_phrase'})
-    ]
-
-    response_content = crowdin_http_request(
-        repository, '/backend/phrases/load_preview', 'GET',
-        file_id=file_id)
-
-    try:
-        response_data = json.loads(response_content.decode('utf-8'))['data']
-    except:
-        print(file_name, file_id, response_content)
-        return False
-
-    translations_hidden = {
-        entry['id']: entry['hidden'] == '1'
-            for entry in response_data
-    }
-
-    for tag in translation_tags:
-        translation_id = tag.attrs['id'][len('crowdin_phrase_'):]
-
-        is_hide_translation = translation_filter(tag)
-        was_hidden_translation = translations_hidden[translation_id]
-
-        if is_hide_translation == was_hidden_translation:
-            continue
-
-        if is_hide_translation:
-            print('hide', tag)
-            hide_translation(repository, translation_id)
-        else:
-            print('show', tag)
-            show_translation(repository, translation_id)
-
-    return False
-
-# Clear out auto-translations so we have a better sense of progress
-
-def delete_suggestions(repository, file_name, translation_id, suggestion_filter):
-    response_content = crowdin_http_request(
-        repository, '/backend/translation/phrase', 'GET',
-        translation_id=translation_id)
-
-    response_data = json.loads(response_content.decode('utf-8'))['data']
-
-    if response_data['success']:
-        raw_suggestions = response_data['suggestions']
-    else:
-        raw_suggestions = []
-
-    if type(raw_suggestions) is dict:
-        suggestions = [
-            suggestion for key, sublist in raw_suggestions.items() for suggestion in sublist
-                if suggestion_filter(suggestion)
-        ]
-    elif type(raw_suggestions) is list:
-        suggestions = [
-            suggestion for suggestion in raw_suggestions
-                if suggestion_filter(suggestion)
-        ]
-    else:
-        logging.info('Unable to find translation %s for file %s' % (translation_id, file_name))
-        suggestions = []
-
-    if len(suggestions) == 0:
-        return False
-
-    for suggestion in suggestions:
-        logging.info('Deleting suggestion %s from user %s' % (suggestion['id'], suggestion['user']['login']))
-        crowdin_http_request(
-            repository, '/backend/suggestions/delete', 'GET',
-            translation_id=translation_id, plural_id='-1', suggestion_id=suggestion['id'])
-
-    return True
-
-def delete_auto_translations(repository, file_info):
-    for file_name, file_metadata in file_info.items():
-        if 'id' not in file_metadata:
-            continue
-
-        logging.info('Removing auto-translations for file %s' % file_name)
-
-        process_phrases(
-            repository, file_name, file_metadata,
-            lambda x: True,
-            None,
-            lambda x: x['user']['login'] == 'is-user')
-
-# Tag checking against Crowdin HTML
-
-def should_hide_tag(tag):
-    if tag is None:
-        return False
-
-    if tag.name != 'code' and tag.name != 'pre':
-        inner_html = tag.decode_contents()
-
-        if inner_html[:5] == '<code' and inner_html[-7:] == '</code>':
-            return True
-        
-        if inner_html[:4] == '<pre' and inner_html[-5:] == '</pre>':
-            return True
-
-        if inner_html[:4] == '<img' and inner_html[-2:] == '/>':
-            return True
-
-        return False
-
-    if 'class' not in tag.attrs:
-        return True
-
-    for x in tag.attrs['class']:
-        if x is None or len(x) == 0:
-            continue
-
-        if x[-2:] == '::':
-            return False
-
-        if x[0] == '{':
-            return x in ['{toctree}', '{raw}', '{literalinclude}']
-
-    return True
-
-def is_hidden_link(x):
-    hidden_block = x.find_parent(attrs={'class': 'hidden_texts_block'})
-
-    if hidden_block is None:
-        return False
-
-    hidden_title = hidden_block.find(attrs={'class': 'hidden_phrases_title'})
-
-    if hidden_title is None:
-        return False
-
-    return hidden_title.text.strip() == 'Link addresses'
-
-def is_within_code_tag(x):
-    if 'class' in x.attrs and 'crowdin_phrase_translated' in x.attrs['class']:
-        return False
-
-    if x.text is not None:
-        if x.text.find('[TOC') == 0:
-            return True
-
-        if x.text.find('CVSS') != -1 and x.text.find('CVE') != -1:
-            return True
-
-        if x.find_parent(attrs={'id': 'front-matter'}) is not None:
-            return True
-
-    if should_hide_tag(x) or is_hidden_link(x):
-        return True
-
-    parent_code = x.find_parent('code')
-    parent_pre = x.find_parent('pre')
-    parent_div = x.find_parent('div')
-
-    if parent_div is not None:
-        if 'class' not in parent_div.attrs or 'adm-body' not in parent_div.attrs['class']:
-            parent_div = None
-
-    if parent_code is None and parent_pre is None and parent_div is None:
-        return False
-
-    if parent_code is not None and not should_hide_tag(parent_code):
-        return False
-
-    if parent_pre is not None:
-        if not should_hide_tag(parent_pre):
-            return False
-
-        inner_html = x.decode_contents()
-
-        if len(inner_html) > 1 and inner_html[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and inner_html[1] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-            return False
-
-    if parent_div is not None:
-        grandparent_div = parent_div.find_parent('div')
-
-        if grandparent_div is not None and 'class' in grandparent_div.attrs:
-            for literal_adm in ['adm-raw', 'adm-include', 'adm-literalinclude']:
-                if literal_adm in grandparent_div.attrs['class']:
-                    print(literal_adm)
-                    return True
-
-        return False
-
-    return True
-
-def is_rst_directive(x):
-    return x.text and ( \
-        x.text.find('====') != -1 or x.text.find('----') != -1 or \
-        x.text == '..' or x.text.find('::') != -1 or x.text.find(':') == 0 or \
-        x.text.find(':doc:') != -1 or x.text.find(':ref:') != -1 or \
-        x.text.lower() == x.text or \
-        x.text[-3:] == '.md' or x.text[-4:] == '.rst' \
-    )
+def hide_translation(repository, project_id, string_id):
+    crowdin_request('/projects/%s/strings/%s' % (project_id, string_id), 'PATCH', [{'op': 'replace', 'path': '/isHidden', 'value': True}])
 
 # Clear out code translations
 
 def hide_code_translations(repository, source_language, target_language, file_name, file_metadata):
     logging.info('Checking auto code translations for file %s' % file_name)
 
-    if file_name[-4:] == '.rst':
-        has_suggestions = process_phrases(
-            repository, file_name, file_metadata,
-            is_rst_directive, lambda x: True)
-    else:
-        has_suggestions = process_phrases(
-            repository, file_name, file_metadata,
-            is_within_code_tag, lambda x: x['user']['login'] == 'is-user')
+    project_id = repository.crowdin.project_id
+    file_id = file_metadata['id']
 
-    return has_suggestions
+    status_code, response_data = crowdin_request('/projects/%s/strings' % project_id, 'GET', {'fileId': file_id})
+
+    for entry in response_data:
+        is_hide_translation = entry['data']['context'].find('/pre') != -1 or entry['data']['context'].find('/code') != -1
+        was_hidden_translation = entry['data']['isHidden']
+        string_id = entry['data']['id']
+
+        if is_hide_translation == was_hidden_translation:
+            continue
+
+        if is_hide_translation:
+            hide_translation(repository, project_id, string_id)
+        else:
+            show_translation(repository, project_id, string_id)
+
+    return False
 
 def process_code_translations(project_id, project_name, project_folder, source_language, target_language, force=False):
     repository = TranslationRepository(None, CrowdInRepository(source_language, project_id, project_name, None, project_folder, False, False))

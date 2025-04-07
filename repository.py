@@ -33,7 +33,7 @@ def get_repository(projects, source_language, git_repository, git_branch, git_fo
         crowdin_single_folder = project_folder
     else:
         github_single_folder = git_folder + '/' + single_folder
-        crowdin_single_folder = project_folder + '/' + single_folder
+        crowdin_single_folder = project_folder
     
     git_root = os.path.dirname(initial_dir) + '/' + git_repository
 
@@ -46,7 +46,9 @@ def get_repository(projects, source_language, git_repository, git_branch, git_fo
 
     origin_url = git.remote('get-url', 'origin')
 
-    if origin_url.find('https://') == 0:
+    if len(origin_url) == 0:
+        origin = None
+    elif origin_url.find('https://') == 0:
         origin = origin_url[origin_url.find('/', 8)+1:origin_url.rfind('.')]
     else:
         origin = origin_url.split(':')[1][:-4]
@@ -57,7 +59,6 @@ def get_repository(projects, source_language, git_repository, git_branch, git_fo
         upstream = None
     elif upstream_url.find('https://') == 0:
         upstream = upstream_url[upstream_url.find('/', 8)+1:upstream_url.rfind('.')]
-        print(upstream)
     else:
         upstream = upstream_url.split(':')[1][:-4]
 
@@ -71,8 +72,8 @@ def get_repository(projects, source_language, git_repository, git_branch, git_fo
     os.chdir(initial_dir)
 
     return TranslationRepository(
-        GitHubRepository(git_root, origin, upstream, git_branch, git_folder, github_single_folder),
-        CrowdInRepository(source_language, project_id, project_name, project_api_key, project_folder, delete_enabled, crowdin_single_folder)
+        github=GitHubRepository(git_root, origin, upstream, git_branch, git_folder, github_single_folder),
+        crowdin=CrowdInRepository(source_language, project_id, project_name, project_api_key, project_folder, delete_enabled, crowdin_single_folder)
     )
 
 def get_subrepositories(repository):

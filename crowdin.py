@@ -1,6 +1,6 @@
 from collections import defaultdict
 from crowdin_hide import hide_code_translations
-from crowdin_util import crowdin_http_request, crowdin_request, get_crowdin_file_info, upload_file_to_crowdin_storage
+from crowdin_util import crowdin_request, get_crowdin_file_info, upload_file_to_crowdin_storage
 from datetime import datetime, timedelta
 import git
 from file_manager import get_crowdin_file, get_local_file, get_root_folders, get_translation_path
@@ -105,8 +105,10 @@ def fix_product_name_tokens(file):
 
 # Wrapper functions to upload sources and download translations.
 
-def get_directory(repository, path):
-    path = '/%s/%s' % (repository.crowdin.dest_folder, path)
+def get_directory(repository, path, create_if_missing=True):
+    path = repository.crowdin.dest_folder if len(path) == 0 else '/%s/%s' % (repository.crowdin.dest_folder, path)
+
+    logging.info('Looking up CrowdIn directory for path %s...' % path)
 
     pagination_data = {
         'offset': 0,
@@ -145,25 +147,39 @@ def get_directory(repository, path):
     if path in directory_paths:
         return directory_paths[path]
 
+    if not create_if_missing:
+        return None
+
     parent_path = os.path.dirname(path)
 
-    while parent_path not in directory_paths and parent_path != '/':
+    while parent_path not in directory_paths and parent_path != '/' and parent_path != '':
         parent_path = os.path.dirname(parent_path)
 
-    if parent_path == '/':
-        parent_directory = {'id': 0}
+    if parent_path == '':
+        parent_directory = None
+        path_elements = path.split('/')
+    elif parent_path == '/':
+        parent_directory = None
         path_elements = path[1:].split('/')
     else:
         parent_directory = directory_paths[parent_path]
         path_elements = path[len(parent_path)+1:].split('/')
-    
+
     for i, name in enumerate(path_elements):
-        logging.info('Looking up subdirectory %s', '/'.join(path_elements[:i+1]))
+        parent_path = '/' + '/'.join(path_elements[:i+1])
+
+        if parent_path in directory_paths:
+            parent_directory = directory_paths[parent_path]
+            continue
+
+        logging.info('Creating subdirectory %s', parent_path)
 
         data = {
             'name': name,
-            'directoryId': parent_directory['id']
         }
+
+        if parent_directory is not None:
+            data['directoryId'] = parent_directory['id']
 
         status_code, parent_directory = crowdin_request(api_path, 'POST', data)
 
@@ -244,12 +260,23 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     
     return before_upload, after_upload
 
-def crowdin_download_translations(repository, source_language, target_language, refresh_files, file_info):
-    if source_language.find('-') != -1:
-        source_language = source_language[:source_language.find('-')]
+def extract_crowdin_translation(repository, export_file_name, source_language, target_language):
+    source_file_prefix = '%s/' % (source_language)
+    target_file_prefix = '%s/' % (target_language)
 
-    if target_language.find('-') != -1:
-        target_language = target_language[:target_language.find('-')]
+    with ZipFile(export_file_name) as zipdata:
+        for zipinfo in zipdata.infolist():
+            if zipinfo.filename.find(source_file_prefix) == 0:
+                with open('%s.crc32' % zipinfo.filename, 'w', encoding='utf-8') as f:
+                    f.write(str(zipinfo.CRC))
+            if zipinfo.filename.find(target_file_prefix) == 0:
+                zipdata.extract(zipinfo, repository.github.git_root)
+
+    return export_file_name
+
+def crowdin_download_translations(repository, source_language, target_language, refresh_files, file_info):
+    source_language = source_language[:2]
+    target_language = target_language[:2]
 
     updated_files = list(refresh_files)
 
@@ -260,6 +287,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
     dest_directories = [directory['data'] for directory in response_data if directory['data']['name'] == repository.crowdin.dest_folder]
 
     if len(dest_directories) != 1:
+        logger.info('Unable to find data directory %s' % repository.crowdin.dest_folder)
         return
 
     dest_directory_id = dest_directories[0]['id']
@@ -300,7 +328,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
         api_path = '/projects/%s/translations/builds/directories/%s' % (repository.crowdin.project_id, dest_directory_id)
 
         data = {
-            'targetLanguageIds': [target_language]
+            'targetLanguageIds': [source_language, target_language]
         }
 
         status_code, response_data = crowdin_request(api_path, 'POST', data)
@@ -325,19 +353,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
         for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
 
-    file_prefix = '%s/%s/' % (target_language, source_language)
-
-    with ZipFile(export_file_name) as zipdata:
-        for zipinfo in zipdata.infolist():
-            if len(zipinfo.filename) <= len(file_prefix):
-                continue
-        
-            if zipinfo.filename[:len(file_prefix)] != file_prefix:
-                logging.info('Unexpected file name %s does not start with %s' % (zipinfo.filename, file_prefix))
-                continue
-
-            zipinfo.filename = '%s/%s' % (target_language, zipinfo.filename[len(file_prefix):])
-            zipdata.extract(zipinfo, repository.github.git_root)
+    return extract_crowdin_translation(repository, export_file_name, source_language, target_language)
 
 # Send requests to CrowdIn to do automated machine translation.
 

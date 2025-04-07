@@ -24,7 +24,7 @@ def get_repositories():
 
     repositories = [get_repository(projects, **x) for x in repositories_df.to_dict('records')]
 
-    return repositories
+    return [x for x in repositories if x is not None]
 
 def list_jobs():
     all_repositories = get_repositories()

@@ -112,38 +112,6 @@ def crowdin_authenticate(path):
 
     return True
 
-def crowdin_http_request(repository, path, method, **data):
-    if method == 'GET':
-        get_data = { key: value for key, value in data.items() }
-
-        if repository is not None:
-            get_data['project_id'] = repository.crowdin.project_id
-            get_data['target_language_id'] = '25'
-
-        query_string = '&'.join([urllib.parse.quote(key) + '=' + urllib.parse.quote(str(value)) for key, value in get_data.items()])
-
-        url = 'https://crowdin.com%s?%s' % (path, query_string)
-    else:
-        url = 'https://crowdin.com%s' % path
-
-    try:
-        if method == 'GET':
-            print('GET %s' % url)
-            r = session.get(url, headers={'x-csrf-token': x_csrf_token})
-        elif method == 'POST':
-            print('POST %s' % url)
-            r = session.post(url, data=data, headers={'x-csrf-token': x_csrf_token})
-
-        if r.url.find('/login') == -1:
-            return r.content
-    except:
-        print('exception')
-        pass
-
-    crowdin_authenticate(path)
-
-    return crowdin_http_request(repository, path, method, **data)
-
 crowdin_base_url = 'https://api.crowdin.com/api'
 user_id = None
 
@@ -160,7 +128,8 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
 
     headers = {
         'user-agent': 'python',
-        'authorization': 'Bearer %s' % bearer_token
+        'authorization': 'Bearer %s' % bearer_token,
+        'accept': 'application/json',
     }
 
     if user_id is None and api_path != '/user':
@@ -169,16 +138,21 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
 
     request_url = crowdin_base_url + '/v2' + api_path
 
-    if method == 'GET':
-        request_url = request_url + '?' + '&'.join([key + '=' + str(value) for key, value in data.items()])
-
-        r = requests.get(request_url, headers=headers)
+    if method == 'DELETE':
+        r = requests.delete(request_url, params=data, headers=headers)
+    elif method == 'GET':
+        r = requests.get(request_url, params=data, headers=headers)
+    elif method == 'PATCH':
+        r = requests.patch(request_url, json=data, headers=headers)
     elif method == 'POST':
         r = requests.post(request_url, json=data, headers=headers)
     elif method == 'PUT':
         r = requests.put(request_url, json=data, headers=headers)
     else:
-        raise 'Unrecognized method: %s' % method
+        raise Exception('Unrecognized method: %s' % method)
+
+    if r.status_code == 204:
+        return (status_code, None)
 
     if r.status_code == 401:
         logging.error('Invalid bearer token, please update')
@@ -192,7 +166,11 @@ def crowdin_request(api_path, method='GET', data=None, files=None):
         logging.error('HTTP Error: %d' % r.status_code)
         return (r.status_code, None)
 
-    response = json.loads(r.content)
+    try:
+        response = r.json()
+    except:
+        return (r.status_code, r.text)
+
     response_data = response['data']
 
     if method != 'GET' or 'pagination' not in response or offset != 0:

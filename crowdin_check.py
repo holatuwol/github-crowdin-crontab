@@ -1,4 +1,4 @@
-from crowdin_util import crowdin_http_request, crowdin_request, get_crowdin_file_info
+from crowdin_util import crowdin_request, get_crowdin_file_info
 import git
 import json
 import logging
