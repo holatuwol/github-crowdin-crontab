@@ -1,189 +1,13 @@
-from collections import defaultdict
-from crowdin_hide import hide_code_translations
-from crowdin_util import crowdin_request, get_crowdin_file_info, upload_file_to_crowdin_storage
+from crowdin_check import hide_code_translations
+from crowdin_util import crowdin_request, get_crowdin_file_info, get_directory, upload_file_to_crowdin_storage
 from datetime import datetime, timedelta
-import git
-from file_manager import get_crowdin_file, get_local_file, get_root_folders, get_translation_path
-import json
 import logging
-import math
 import os
-import numpy as np
-import pandas as pd
-from repository import CrowdInRepository, TranslationRepository, initial_dir
 import requests
-import subprocess
 import time
 from zipfile import ZipFile
 
-# Use "pandoc" to disable word wrapping to improve machine translations.
-
-def _pandoc(source_file, target_file, *args):
-    with open(source_file, 'r') as f:
-        lines = f.readlines()
-
-        title_pos = -1
-        toc_pos = -1
-
-        for i, line in enumerate(lines):
-            if title_pos == -1 and line.find('#') == 0:
-                title_pos = i
-            elif line.find('[TOC') == 0:
-                toc_pos = i
-
-        if source_file == target_file:
-            head_lines = ''.join(lines[0:max(title_pos, toc_pos)+1])
-            tail_lines = ''.join(lines[max(title_pos, toc_pos)+1:])
-        else:
-            head_lines = None
-
-            if title_pos == -1:
-                tail_lines = ''.join(lines[max(title_pos, toc_pos)+1:])
-            else:
-                tail_lines = lines[title_pos] + '\n' + ''.join(lines[max(title_pos, toc_pos)+1:])
-
-    cmd = ['pandoc'] + list(args)
-
-    pipe = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out, err = pipe.communicate(input=tail_lines.encode('UTF-8'))
-
-    nowrap_lines = out.decode('UTF-8', 'replace')
-
-    with open(target_file, 'w') as f:
-        if head_lines is not None:
-            f.write(head_lines)
-            f.write('\n')
-
-        f.write(nowrap_lines)
-
-# Generate a "crowdin.yaml" file to tell the CLI what to do.
-
-def get_crowdin_config_entry(repository, source_language, target_language, source_file):
-    assert(not os.path.isdir(source_file))
-
-    if source_language.find('-') != -1:
-        source_language = source_language[:source_language.find('-')]
-
-    if target_language.find('-') != -1:
-        target_language = target_language[:target_language.find('-')]
-
-    source_language_path = source_language + '/'
-
-    if source_file[0:3] == source_language_path:
-        target_language_path = target_language + '/'
-
-        target_file = target_language_path + source_file[3:]
-        translation = '%two_letters_code%/' + source_file[3:]
-    else:
-        source_language_path = '/' + source_language + '/'
-        target_language_path = '/' + target_language + '/'
-
-        target_file = source_file.replace(source_language_path, target_language_path)
-        translation = source_file.replace(source_language_path, '/%two_letters_code%/')
-
-    dest = '/' + get_crowdin_file(repository, source_file)
-
-    os.makedirs(os.path.dirname(target_file), exist_ok=True)
-
-    return {
-        'source': source_file,
-        'dest': dest,
-        'translation': translation
-    }
-
-def fix_product_name_tokens(file):
-    with open(file, 'r') as f:
-        file_content = f.read()
-
-    file_content = file_content.replace('@<', '@').replace('@>', '@')
-
-    for token in ['@app-ref@', '@commerce', '@ide@', '@portal@', '@platform-ref@', '@product@', '@product-ver@']:
-        file_content = file_content.replace('@ %s @' % (token[1:-1]), token)
-
-    with open(file, 'w') as f:
-        f.write(file_content)
-
 # Wrapper functions to upload sources and download translations.
-
-def get_directory(repository, path, create_if_missing=True):
-    path = repository.crowdin.dest_folder if len(path) == 0 else '/%s/%s' % (repository.crowdin.dest_folder, path)
-
-    logging.info('Looking up CrowdIn directory for path %s...' % path)
-
-    pagination_data = {
-        'offset': 0,
-        'limit': 500
-    }
-
-    api_path = '/projects/%s/directories' % repository.crowdin.project_id
-    status_code, response_data = crowdin_request(api_path, 'GET', {})
-
-    directories = {
-        directory['data']['id']: directory['data']
-            for directory in response_data
-    }
-
-    directory_paths = {}
-
-    for directory in directories.values():
-        path_elements = []
-
-        parent_directory = directory
-
-        while parent_directory is not None:
-            path_elements.append(parent_directory['name'])
-
-            if parent_directory['directoryId'] is None:
-                parent_directory = None
-            else:
-                parent_directory = directories[parent_directory['directoryId']]
-
-        path_elements.reverse()
-
-        directory_path = '/' + '/'.join(path_elements)
-
-        directory_paths[directory_path] = directory
-
-    if path in directory_paths:
-        return directory_paths[path]
-
-    if not create_if_missing:
-        return None
-
-    parent_path = os.path.dirname(path)
-
-    while parent_path not in directory_paths and parent_path != '/' and parent_path != '':
-        parent_path = os.path.dirname(parent_path)
-
-    if parent_path == '':
-        parent_directory = None
-        path_elements = path.split('/')
-    elif parent_path == '/':
-        parent_directory = None
-        path_elements = path[1:].split('/')
-    else:
-        parent_directory = directory_paths[parent_path]
-        path_elements = path[len(parent_path)+1:].split('/')
-
-    for i, name in enumerate(path_elements):
-        parent_path = '/' + '/'.join(path_elements[:i+1])
-
-        if parent_path in directory_paths:
-            parent_directory = directory_paths[parent_path]
-            continue
-
-        logging.info('Creating subdirectory %s', parent_path)
-
-        data = {
-            'name': name,
-        }
-
-        if parent_directory is not None:
-            data['directoryId'] = parent_directory['id']
-
-        status_code, parent_directory = crowdin_request(api_path, 'POST', data)
-
-    return parent_directory
 
 def crowdin_upload_sources(repository, source_language, target_language, new_files):
     if source_language.find('-') != -1:
@@ -194,31 +18,17 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
 
     before_upload = get_crowdin_file_info(repository, target_language)
 
-    for file in new_files:
-        extension = file[file.rfind('.'):]
-
-        if extension == '.md' or extension == '.markdown':
-            git.checkout(file)
-
-            _pandoc(file, file, '--from=gfm', '--to=gfm', '--wrap=none')
-
-            fix_product_name_tokens(file)
-
-    df = pd.read_csv('%s/ignore.csv' % initial_dir)
-    ignore_files = set(df[df['repository'] == repository.github.upstream]['file'].values)
-    upload_files = [file for file in new_files if file not in ignore_files]
-
     existing_files = {}
 
-    for i, file in enumerate(upload_files):
+    for i, file in enumerate(new_files):
         file_name = os.path.basename(file)
 
-        logging.info('Preparing to upload file %d/%d...' % (i, len(upload_files)))
+        logging.info('Preparing to upload file %d/%d...' % (i, len(new_files)))
 
         directory = get_directory(repository, os.path.dirname(file))
         directory_id = directory['id']
 
-        logging.info('Uploading file %d/%d...' % (i, len(upload_files)))
+        logging.info('Uploading file %d/%d...' % (i, len(new_files)))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
 
@@ -227,7 +37,7 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
                 'directoryId': directory_id
             }
 
-            api_path = '/projects/%s/files' % repository.crowdin.project_id
+            api_path = '/projects/%s/files' % repository.project_id
             status_code, directory_response_data = crowdin_request(api_path, 'GET', data)
             existing_files[directory_id] = directory_response_data
 
@@ -237,23 +47,20 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
             'storageId': response_data['id']
         }
 
-        logging.info('Telling crowdin about uploaded file %d/%d (%s)...' % (i, len(upload_files), file_name))
+        logging.info('Telling crowdin about uploaded file %d/%d (%s)...' % (i, len(new_files), file_name))
 
         if len(matching_files) == 1:
             data['updateOption'] = 'keep_translations_and_approvals'
             file_id = matching_files[0]['data']['id']
-            api_path = '/projects/%s/files/%s' % (repository.crowdin.project_id, file_id)
+            api_path = '/projects/%s/files/%s' % (repository.project_id, file_id)
             crowdin_request(api_path, 'PUT', data)
         else:
             data['name'] = file_name
             data['directoryId'] = directory_id
-            api_path = '/projects/%s/files' % repository.crowdin.project_id
+            api_path = '/projects/%s/files' % repository.project_id
             crowdin_request(api_path, 'POST', data)
 
-    for file in new_files:
-        git.checkout(file)
-
-    if len(upload_files) > 0:
+    if len(new_files) > 0:
         after_upload = get_crowdin_file_info(repository, target_language)
     else:
         after_upload = before_upload
@@ -261,8 +68,14 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
     return before_upload, after_upload
 
 def extract_crowdin_translation(repository, export_file_name, source_language, target_language):
+    if export_file_name is None:
+        return None
+
     source_file_prefix = '%s/' % (source_language)
     target_file_prefix = '%s/' % (target_language)
+
+    if not os.path.exists(export_file_name):
+        return
 
     with ZipFile(export_file_name) as zipdata:
         for zipinfo in zipdata.infolist():
@@ -270,7 +83,7 @@ def extract_crowdin_translation(repository, export_file_name, source_language, t
                 with open('%s.crc32' % zipinfo.filename, 'w', encoding='utf-8') as f:
                     f.write(str(zipinfo.CRC))
             if zipinfo.filename.find(target_file_prefix) == 0:
-                zipdata.extract(zipinfo, repository.github.git_root)
+                zipdata.extract(zipinfo, repository.git_root)
 
     return export_file_name
 
@@ -280,21 +93,21 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
     updated_files = list(refresh_files)
 
-    api_path = '/projects/%s/directories' % repository.crowdin.project_id
+    api_path = '/projects/%s/directories' % repository.project_id
 
     status_code, response_data = crowdin_request(api_path, 'GET', {})
 
-    dest_directories = [directory['data'] for directory in response_data if directory['data']['name'] == repository.crowdin.dest_folder]
+    dest_directories = [directory['data'] for directory in response_data if directory['data']['name'] == repository.dest_folder]
 
     if len(dest_directories) != 1:
-        logger.info('Unable to find data directory %s' % repository.crowdin.dest_folder)
+        logging.info('Unable to find data directory %s' % repository.dest_folder)
         return
 
     dest_directory_id = dest_directories[0]['id']
 
     def get_recent_build(build_id):
         if build_id is not None:
-            api_path = '/projects/%s/translations/builds/%s' % (repository.crowdin.project_id, build_id)
+            api_path = '/projects/%s/translations/builds/%s' % (repository.project_id, build_id)
 
             status_code, response_data = crowdin_request(api_path, 'GET', {})
 
@@ -303,7 +116,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
 
                 return response_data
 
-        api_path = '/projects/%s/translations/builds' % repository.crowdin.project_id
+        api_path = '/projects/%s/translations/builds' % repository.project_id
 
         logging.info('Retrieving build list...')
         status_code, response_data = crowdin_request(api_path, 'GET', {})
@@ -325,7 +138,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
     recent_build = get_recent_build(None)
 
     if recent_build is None:
-        api_path = '/projects/%s/translations/builds/directories/%s' % (repository.crowdin.project_id, dest_directory_id)
+        api_path = '/projects/%s/translations/builds/directories/%s' % (repository.project_id, dest_directory_id)
 
         data = {
             'targetLanguageIds': [source_language, target_language]
@@ -339,7 +152,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
         time.sleep(15)
         recent_build = get_recent_build(recent_build['id'])
 
-    api_path = '/projects/%s/translations/builds/%s/download' % (repository.crowdin.project_id, recent_build['id'])
+    api_path = '/projects/%s/translations/builds/%s/download' % (repository.project_id, recent_build['id'])
 
     status_code, response_data = crowdin_request(api_path, 'GET', {})
 
@@ -360,7 +173,7 @@ def crowdin_download_translations(repository, source_language, target_language, 
 def translate_with_machine(repository, target_language, engine, file_ids):
     file_count = len(file_ids)
 
-    update_api_path = '/projects/%s/pre-translations' % repository.crowdin.project_id
+    update_api_path = '/projects/%s/pre-translations' % repository.project_id
 
     for i, file_id in enumerate(file_ids.keys()):
         logging.info('crowdin-api pre-translate %s (%d/%d)' % (engine, i + 1, file_count))
@@ -378,14 +191,12 @@ def translate_with_machine(repository, target_language, engine, file_ids):
 
         status_code, response_data = crowdin_request(update_api_path, 'POST', data)
 
-        status_api_path = '/projects/%s/pre-translations/%s' % (repository.crowdin.project_id, response_data['identifier'])
+        status_api_path = '/projects/%s/pre-translations/%s' % (repository.project_id, response_data['identifier'])
 
         while response_data['finishedAt'] is None:
             logging.info('Waiting for translation %d/%d to finish...' % (i + 1, file_count))
             time.sleep(5)
             status_code, response_data = crowdin_request(status_api_path, 'GET', {})
-
-crowdin_request('/projects', 'GET', {})
 
 def get_missing_phrases_files(repository, source_language, target_language, file_info):
     if source_language.find('-') != -1:

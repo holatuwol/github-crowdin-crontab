@@ -1,22 +1,18 @@
-from bs4 import BeautifulSoup
+#!/usr/bin/env python
+
 import binascii
+from crowdin import crowdin_download_translations, crowdin_upload_sources, extract_crowdin_translation, pre_translate
+from crowdin_util import crowdin_request, get_directory, get_repository, get_repository_state
 import datetime
 from dotenv import load_dotenv
 import json
 import logging
-import os
-import pickle
-import re
-import requests
-import sys
-import zipfile
-
-from cronjob import get_repositories
-from crowdin import crowdin_download_translations, crowdin_upload_sources, extract_crowdin_translation, get_directory, pre_translate
-from crowdin_sync import get_repository_state, update_repository
-from crowdin_util import crowdin_request
-import git
 import onepass
+import os
+import requests
+from session import session
+from session import save_session
+import sys
 
 disclaimer = {
 	'ja_JP': 'ご覧のページは、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、 <a href="mailto:support-content-jp@liferay.com">こちら</a> までご連絡ください。'
@@ -27,18 +23,6 @@ env = load_dotenv()
 learn_domain = os.getenv('learn_domain')
 learn_group_id = os.getenv('learn_group_id')
 learn_scratch_dir = os.getenv('learn_scratch_dir')
-
-session_file = os.path.join(os.getcwd(), 'session.ser')
-
-if os.path.isfile(session_file):
-    try:
-        with open(session_file, 'rb') as f:
-            session = pickle.load(f)
-    except:
-        pass
-else:
-    session = requests.session()
-
 
 access_token = None
 access_token_expires = None
@@ -177,6 +161,11 @@ def get_outdated_articles(language):
 	language_folder = '%s/%s' % (learn_scratch_dir, language[:2])
 	outdated_articles = []
 
+	if not os.path.exists(language_folder):
+		print(len(outdated_articles), 'out of date files')
+
+		return outdated_articles
+
 	for html_file_name in [file for file in os.listdir(language_folder) if file[-5:] == '.html']:
 		html_file = '%s/%s' % (language_folder, html_file_name)
 		hash_file = '%s.crc32' % html_file
@@ -198,11 +187,11 @@ def get_outdated_articles(language):
 
 	return outdated_articles
 
-def copy_learn_to_crowdin(source_language, target_language):
-	all_repositories = get_repositories()
-	repository = [x for x in all_repositories if x.crowdin.dest_folder == os.getenv('learn_domain')][0]
-
+def copy_learn_to_local(source_language):
 	download_updated_articles(source_language)
+
+def copy_local_to_crowdin(source_language, target_language):
+	repository = get_repository(learn_domain)
 
 	outdated_articles = get_outdated_articles(source_language)
 
@@ -214,7 +203,7 @@ def copy_learn_to_crowdin(source_language, target_language):
 	crowdin_directory = get_directory(repository, '', False)
 
 	if crowdin_directory is not None:
-		delete_url = '/projects/%s/directories/%s' % (repository.crowdin.project_id, crowdin_directory['id'])
+		delete_url = '/projects/%s/directories/%s' % (repository.project_id, crowdin_directory['id'])
 
 		status_code, response_data = crowdin_request(delete_url, 'DELETE')
 
@@ -227,8 +216,7 @@ def copy_learn_to_crowdin(source_language, target_language):
 def translate_learn_on_crowdin(source_language, target_language):
 	outdated_articles = get_outdated_articles(source_language)
 
-	all_repositories = get_repositories()
-	repository = [x for x in all_repositories if x.crowdin.dest_folder == os.getenv('learn_domain')][0]
+	repository = get_repository(learn_domain)
 
 	new_files, all_files, file_info = get_repository_state(repository, source_language[:2], target_language[:2])
 
@@ -242,8 +230,7 @@ def translate_learn_on_crowdin(source_language, target_language):
 def copy_crowdin_to_local(source_language, target_language):
 	outdated_articles = get_outdated_articles(source_language)
 
-	all_repositories = get_repositories()
-	repository = [x for x in all_repositories if x.crowdin.dest_folder == os.getenv('learn_domain')][0]
+	repository = get_repository(learn_domain)
 
 	new_files, all_files, file_info = get_repository_state(repository, source_language[:2], target_language[:2])
 
@@ -322,8 +309,11 @@ if __name__ == '__main__':
 	try:
 		actions = set(sys.argv[1:])
 
+		if 'sync' in actions:
+			copy_learn_to_local('en_US')
+
 		if 'upload' in actions:
-			copy_learn_to_crowdin('en_US', 'ja_JP')
+			copy_local_to_crowdin('en_US', 'ja_JP')
 		
 		if 'translate' in actions:
 			translate_learn_on_crowdin('en_US', 'ja_JP')
@@ -334,5 +324,4 @@ if __name__ == '__main__':
 		if 'publish' in actions:
 			copy_local_to_learn('en_US', 'ja_JP')
 	finally:
-		with open(session_file, 'wb') as f:
-			pickle.dump(session, f)
+		save_session()

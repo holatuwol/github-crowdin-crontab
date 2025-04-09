@@ -1,5 +1,5 @@
-source_language,git_repository,git_branch,git_folder,project_id,project_name,project_folder,single_folder,delete_enabled
-en,zendesk-articles,master,en,420856,liferay-japan-documentation,zendesk,,TRUE
-en,zendesk-articles-ja,master,ja,428398,liferay-japan-gs,zendesk,,TRUE
-en,learn-xliff,master,en,420856,liferay-japan-documentation,learn.liferay.com,,TRUE
-en,learn-uat-xliff,master,en,420856,liferay-japan-documentation,learn-uat.liferay.com,,TRUE
+source_language,git_repository,git_folder,project_id,project_name,project_folder
+en,zendesk-articles,en,420856,liferay-japan-documentation,liferay-support.zendesk.com
+en,zendesk-articles-ja,ja,428398,liferay-japan-gs,liferay-support.zendesk.com
+en,learn-xliff,en,420856,liferay-japan-documentation,learn.liferay.com
+en,learn-uat-xliff,en,420856,liferay-japan-documentation,learn-uat.liferay.com

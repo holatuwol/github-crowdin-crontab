@@ -1,33 +1,118 @@
+#!/usr/bin/env python
+
 from bs4 import BeautifulSoup
-from collections import defaultdict
+import codecs
+from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
+from crowdin_util import get_repository, get_repository_state, get_translation_path, initial_dir
 from datetime import datetime
-import dateutil.parser
-import inspect
+import git
 import json
 import logging
 import math
+import onepass
 import os
-import pandas as pd
+from session import initial_dir, save_session, session
 import sys
 
-script_root_folder = os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
-faster_deploy_folder = os.path.join(os.path.dirname(script_root_folder), 'liferay-faster-deploy')
+disclaimer = {
+'ja': '''
+<aside class="alert alert-info"><span class="wysiwyg-color-blue120">
+ご覧のページは、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、<a href="mailto:support-content-jp@liferay.com">こちら</a>までご連絡ください。
+</span></aside>
+'''.strip(),
+'en-us': '''
+<aside class="alert alert-info"><span class="wysiwyg-color-blue120">
+Please be aware that the page you are viewing has been machine translated from Japanese into English and may contain some translation errors. If you observe any issues with the translation, please contact us.
+</span></aside>
+'''.strip()
+}
 
-sys.path.insert(0, script_root_folder)
-sys.path.insert(0, faster_deploy_folder)
+ignore_characters = '∟→↑←↓⇨▼○×‘⌘├──'
+japanese_spaces = '\u3000\u00a0'
+japanese_punctuation = '【】「」（）：…⋮・□。、'
 
-from crowdin import crowdin_download_translations, crowdin_upload_sources, pre_translate
-from crowdin_sync import get_repository_state, update_repository
-from disclaimer import add_disclaimer_zendesk, disclaimer_zendesk, disclaimer_zendesk_text
-from file_manager import get_crowdin_file, get_eligible_files, get_translation_path
-import git
-import onepass
-from patcher.scrape_liferay import authenticate, session
-from repository import initial_dir
-from zendesk.fix_untranslated import retranslate_ja_to_en
+def get_previous_tag(utf8_string, pos):
+	y = utf8_string.rfind('>', 0, pos)
 
+	if y == -1:
+		return None
 
+	x = utf8_string.rfind('<', 0, y)
 
+	if x == -1:
+		return None
+
+	tag = utf8_string[x+1:y]
+
+	if tag == 'br':
+		return get_previous_tag(utf8_string, x)
+
+	return tag
+
+def requires_new_english_translation(utf8_string):
+	for ch in japanese_spaces:
+		if utf8_string.find(ch) != -1:
+			return True
+
+	for i, ch in enumerate(utf8_string):
+		if ord(ch) > 127 and ch not in ignore_characters and ch not in japanese_punctuation:
+			tag = get_previous_tag(utf8_string, i)
+			if tag != 'code' and tag != 'pre':
+				return True
+
+	return False
+
+def prepare_japanese_for_translation(utf8_string):
+	new_utf8_sb = []
+
+	for i, old_ch in enumerate(utf8_string):
+		if old_ch == '<' or old_ch == '<':
+			tag = get_previous_tag(utf8_string, i)
+			if tag != 'code' and tag != 'pre':
+				new_ch = '\n' + old_ch
+			else:
+				new_ch = old_ch
+		elif ord(old_ch) <= 127:
+			new_ch = old_ch
+		elif old_ch in japanese_spaces:
+			new_ch = ' '
+		else:
+			new_ch = old_ch
+
+		new_utf8_sb.append(new_ch)
+
+	return ''.join(new_utf8_sb)
+
+def retranslate_ja_to_en():
+	article_paths = {}
+
+	for subdir, dirs, en_files in os.walk('en/'):
+		for en_file in en_files:
+			en_file_path = os.path.join(subdir, en_file)
+			ja_file_path = 'ja/' + en_file_path[3:]
+
+			if not os.path.exists(ja_file_path):
+				continue
+
+			with codecs.open(en_file_path, 'r', 'utf-8') as f:
+				en_content = f.read()
+
+			if not requires_new_english_translation(en_content):
+				continue
+
+			x = ja_file_path.rfind('/')
+			y = ja_file_path.find('-', x)
+
+			article_paths[ja_file_path[x+1:y]] = ja_file_path
+
+			with codecs.open(ja_file_path, 'r', 'utf-8') as f:
+				ja_content = prepare_japanese_for_translation(f.read())
+
+			with codecs.open(ja_file_path, 'w', 'utf-8') as f:
+				f.write(ja_content)
+				print(ja_file_path)
+
+	return article_paths
 
 def set_default_parameter(parameters, name, default_value):
     if name not in parameters:
@@ -37,13 +122,13 @@ def get_article_id(file):
     return file[file.rfind('/')+1:file.find('-', file.rfind('/'))]
 
 bearer_configs = {
-	domain: git.config('1password.%s' % domain)
-		for domain in ['liferay-support.zendesk.com', 'liferaysupport1528999723.zendesk.com']
+	'liferay-support.zendesk.com': 'OAuth Token - Zendesk Liferay Support Client Prd',
+    'liferaysupport1528999723.zendesk.com': 'Zendesk Sandbox API Token',
 }
 
 bearer_tokens = {
 	domain: onepass.item(config, 'credential')['credential']
-		for domain, config in bearer_configs.items() if config is not None and config != ''
+		for domain, config in bearer_configs.items()
 }
 
 def zendesk_json_request(domain, api_path, attribute_name, request_type, json_params):
@@ -148,8 +233,8 @@ def zendesk_get_request(domain, api_path, attribute_name, params=None):
     return result
 
 def init_zendesk(domain):
-    logging.info('Authenticating with %s Liferay SAML IdP' % domain)
-    authenticate('https://%s/access/login?redirect_to=' % domain, None)
+    #logging.info('Authenticating with %s Liferay SAML IdP' % domain)
+    #authenticate('https://%s/access/login?redirect_to=' % domain, None)
 
     return zendesk_get_request(domain, '/users/me.json', 'user')[0]
 
@@ -290,7 +375,7 @@ def get_zendesk_articles(repository, domain, source_language, target_language, f
     logging.info('Found %d new/updated tracked articles' % len(new_tracked_articles))
 
     old_dir = os.getcwd()
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     # Cache the articles on disk so we can work on them without having to go back to the API
 
@@ -331,7 +416,7 @@ def copy_crowdin_to_zendesk(repository, domain, source_language, target_language
 
     # Identify the articles which were added to the Git index and send them to Zendesk
 
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     for article_id, source_file in sorted(article_paths.items()):
         article = articles[article_id]
@@ -359,7 +444,7 @@ def translate_zendesk_on_crowdin(repository, domain, source_language, target_lan
 
     old_dir = os.getcwd()
 
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     git.add('*.html')
     git.commit('-m', 'Translated existing articles: %s' % datetime.now())
@@ -373,7 +458,7 @@ def copy_zendesk_to_crowdin(repository, domain, source_language, target_language
         json.dump(articles, f)
 
     old_dir = os.getcwd()
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     if source_language == 'ja' and target_language == 'en-us':
         refresh_paths.update(retranslate_ja_to_en())
@@ -390,7 +475,7 @@ def copy_zendesk_to_crowdin(repository, domain, source_language, target_language
 
 def check_renamed_articles(repository, source_language, target_language, articles, section_paths):
     old_dir = os.getcwd()
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     source_language_path = source_language
 
@@ -474,7 +559,7 @@ def save_article_metadata(domain, repository, target_language, articles, article
         target_language_path = target_language[:target_language.find('-')]
 
     old_dir = os.getcwd()
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     new_section_ids = set([
         str(articles[article_id]['section_id']) for article_id in articles.keys()
@@ -589,7 +674,7 @@ def download_zendesk_articles(repository, domain, source_language, target_langua
     save_article_metadata(domain, repository, target_language, articles, article_paths, categories, sections)
 
     old_dir = os.getcwd()
-    os.chdir(repository.github.git_root)
+    os.chdir(repository.git_root)
 
     # Check if anything appears to be out of date
 
@@ -700,7 +785,7 @@ def requires_update(repository, domain, article, source_language, target_languag
     if target_file is None:
         target_file = get_translation_path(source_file, source_language, target_language)
 
-    target_path = '%s/%s' % (repository.github.git_root, target_file)
+    target_path = '%s/%s' % (repository.git_root, target_file)
 
     if not os.path.exists(target_path):
         logging.info('%s (requires update check: no translation on file system %s)' % (article['id'], target_path))
@@ -735,7 +820,7 @@ def requires_update(repository, domain, article, source_language, target_languag
 
         mt_article_text = BeautifulSoup(mt_article['body'], features='html.parser').get_text().strip()
 
-        if mt_article_text.find(disclaimer_zendesk_text[target_language]) == -1:
+        if mt_article_text.find(disclaimer[target_language]) == -1:
             logging.info('%s (requires update check: missing MT disclaimer)' % article['id'])
             return True
 
@@ -841,3 +926,50 @@ def update_zendesk_translation(repository, domain, article, source_file, target_
             return False
 
     return True
+
+def add_disclaimer_zendesk(article, file, language):
+    with open(file, 'r') as f:
+        lines = f.readlines()
+
+    new_title = lines[0][4:-6] if len(lines[0]) > 1 else lines[1][4:]
+    old_content = ''.join(lines[1:]).strip()
+
+    if lines[1].strip() == '<p class="alert alert-info"><span class="wysiwyg-color-blue120">':
+        new_content = ''.join(lines[4:]).strip()
+    if lines[1].strip() == '<aside class="alert alert-info"><span class="wysiwyg-color-blue120">':
+        new_content = ''.join(lines[4:]).strip()
+    elif len(lines) > 2 and lines[2].strip() == '<p class="alert alert-info"><span class="wysiwyg-color-blue120">':
+        new_content = ''.join(lines[5:]).strip()
+    elif len(lines) > 2 and lines[2].strip() == '<aside class="alert alert-info"><span class="wysiwyg-color-blue120">':
+        new_content = ''.join(lines[5:]).strip()
+    else:
+        new_content = ''.join(lines[1:]).strip()
+
+    if new_content.find('<aside class="alert alert-info"><span class="wysiwyg-color-blue120">') != -1:
+        new_content = new_content[new_content.find('</span></aside>')+15:].strip()
+
+    script_disclaimer = new_content.find('var disclaimerElement')
+
+    if script_disclaimer != -1:
+        script_disclaimer = new_content.rfind('<script>', 0, script_disclaimer)
+        new_content = new_content[0:script_disclaimer].strip()
+
+    if 'mt' in article['label_names'] and language is not None and language != 'en':
+        new_content = (disclaimer[language] + new_content).strip()
+
+    return new_title, old_content, new_content
+
+if __name__ == '__main__':
+    try:
+        domain = sys.argv[1]
+        source_language = sys.argv[2]
+        target_language = sys.argv[3]
+
+        repository = get_repository(domain)
+
+        copy_zendesk_to_crowdin(repository, domain, source_language, target_language)
+        translate_zendesk_on_crowdin(repository, domain, source_language, target_language)
+        download_zendesk_articles(repository, domain, source_language, target_language, True)
+        copy_crowdin_to_zendesk(repository, domain, source_language, target_language)
+    finally:
+        save_session()
