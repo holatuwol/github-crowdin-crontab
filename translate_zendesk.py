@@ -517,11 +517,9 @@ def copy_crowdin_to_zendesk(
 
 
 def translate_zendesk_on_crowdin(repository, domain, source_language, target_language):
-    new_files, all_files, file_info = get_repository_state(
-        repository, source_language, target_language
-    )
+    all_files, file_info = get_repository_state(repository, target_language)
 
-    pre_translate(repository, source_language, target_language, all_files, file_info)
+    pre_translate(repository, source_language[:2], target_language[:2])
 
     crowdin_download_translations(
         repository, source_language, target_language, all_files, file_info

@@ -3,6 +3,7 @@ from crowdin_util import (
     crowdin_request,
     get_crowdin_file_info,
     get_directory,
+    get_repository_state,
     upload_file_to_crowdin_storage,
 )
 from datetime import datetime, timedelta
@@ -206,69 +207,53 @@ def extract_crowdin_translation(
     return export_file_name
 
 
-def get_missing_phrases_files(repository, source_language, target_language, file_info):
-    if source_language.find("-") != -1:
-        source_language = source_language[: source_language.find("-")]
-
-    if target_language.find("-") != -1:
-        target_language = target_language[: target_language.find("-")]
+def get_missing_phrases_file_ids(repository, source_language, target_language):
+    _, file_info = get_repository_state(repository, target_language)
 
     missing_phrases_files = {}
+
+    for crowdin_file, metadata in file_info.items():
+        if metadata["phrases"] != metadata["translated"]:
+            missing_phrases_files[metadata["id"]] = crowdin_file
+
+    return missing_phrases_files
+
+
+def pre_translate(repository, source_language, target_language):
+    _, file_info = get_repository_state(repository, target_language)
 
     for crowdin_file, metadata in file_info.items():
         if metadata["phrases"] != metadata["translated"]:
             hide_code_translations(
                 repository, source_language, target_language, crowdin_file, metadata
             )
-            missing_phrases_files[metadata["id"]] = crowdin_file
 
-    return missing_phrases_files
-
-
-def pre_translate(repository, source_language, target_language, all_files, file_info):
-    if source_language.find("-") != -1:
-        source_language = source_language[: source_language.find("-")]
-
-    if target_language.find("-") != -1:
-        target_language = target_language[: target_language.find("-")]
-
-    # TM = translation memory
-    logging.info("checking if files need to be updated using translation memory")
-    missing_phrases_files = get_missing_phrases_files(
-        repository, source_language, target_language, file_info
+    translate_with_machine(
+        repository, source_language, target_language, "translation memory"
     )
-    logging.info(
-        "%d files need to be updated using translation memory"
-        % len(missing_phrases_files)
-    )
-    translate_with_machine(repository, target_language, "tm", missing_phrases_files)
 
-    # 245660 = DeepL
     if source_language in ["en", "ja"] and target_language in ["en", "ja"]:
-        logging.info(
-            "%d files need to be updated using DeepL" % len(missing_phrases_files)
-        )
-        translate_with_machine(
-            repository, target_language, 245660, missing_phrases_files
-        )
-    else:
-        logging.info(
-            "%d files will not be updated using DeepL, because %s to %s is not supported"
-            % (len(missing_phrases_files), source_language, target_language)
-        )
+        translate_with_machine(repository, source_language, target_language, "DeepL")
 
-    # 213743 = Google Translate
-    logging.info(
-        "%d files need to be updated using Google Translate"
-        % len(missing_phrases_files)
+    translate_with_machine(repository, source_language, target_language, "Google")
+
+
+engines = {"DeepL": 245660, "Google": 213743, "translation memory": "tm"}
+
+
+def translate_with_machine(repository, source_language, target_language, engine_name):
+    file_ids = get_missing_phrases_file_ids(
+        repository, source_language, target_language
     )
-    translate_with_machine(repository, target_language, 213743, missing_phrases_files)
 
-    return get_crowdin_file_info(repository, target_language)
-
-
-def translate_with_machine(repository, target_language, engine, file_ids):
     file_count = len(file_ids)
+
+    logging.info(f"{file_count} files need to be updated using {engine_name}")
+
+    if file_count == 0:
+        return
+
+    engine = engines[engine_name]
 
     update_api_path = "/projects/%s/pre-translations" % repository.project_id
 
@@ -297,7 +282,7 @@ def translate_with_machine(repository, target_language, engine, file_ids):
 
         while response_data["finishedAt"] is None:
             logging.info(
-                "Waiting for translation %d/%d to finish..." % (i + 1, file_count)
+                f"Waiting for {engine_name} {i+1}/{file_count} to finish..."
             )
             time.sleep(5)
             status_code, response_data = crowdin_request(status_api_path, "GET", {})

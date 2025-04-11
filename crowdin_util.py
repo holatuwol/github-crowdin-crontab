@@ -156,7 +156,7 @@ def crowdin_request(api_path, method="GET", data=None, files=None):
         raise Exception("Unrecognized method: %s" % method)
 
     if r.status_code == 204:
-        return (status_code, None)
+        return (r.status_code, None)
 
     if r.status_code == 401:
         logging.error("Invalid bearer token, please update")
@@ -276,19 +276,18 @@ def get_crowdin_file_info(repository, target_language):
     return file_info
 
 
-def get_directory(repository, path, create_if_missing=True):
-    path = (
-        repository.dest_folder
-        if len(path) == 0
-        else "/%s/%s" % (repository.dest_folder, path)
-    )
+def get_directory(repository, subfolder, create_if_missing=True):
+    path = f"/{repository.dest_folder}/{subfolder}"
+
+    if path[-1] == '/':
+        path = path[:-1]
 
     logging.info("Looking up CrowdIn directory for path %s..." % path)
 
     pagination_data = {"offset": 0, "limit": 500}
 
     api_path = "/projects/%s/directories" % repository.project_id
-    status_code, response_data = crowdin_request(api_path, "GET", {})
+    status_code, response_data = crowdin_request(api_path, "GET", pagination_data)
 
     directories = {
         directory["data"]["id"]: directory["data"] for directory in response_data
@@ -426,7 +425,7 @@ def get_repository_helper(
     )
 
 
-def get_repository_state(repository, source_language, target_language):
+def get_repository_state(repository, target_language):
     global git_root
     git_root = repository.git_root
 
@@ -443,7 +442,7 @@ def get_repository_state(repository, source_language, target_language):
 
     all_files = sorted(set(all_files))
 
-    return all_files, all_files, file_info
+    return all_files, file_info
 
 
 def get_translation_path(file, source_language, target_language):

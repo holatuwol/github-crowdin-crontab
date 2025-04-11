@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import os
 from subprocess import Popen, PIPE
@@ -21,8 +22,14 @@ def item(uuid, fields):
         "item", ["get", uuid, "--reveal", "--format", "json", "--fields", fields]
     )
 
-    if data[0] == "[":
-        return {item["id"]: item["value"] for item in json.loads(data)}
+    fields_dict = defaultdict(str)
+
+    if len(data) == 0:
+        return fields_dict
+    elif data[0] == "[":
+        fields_dict.update({item["id"]: item["value"] for item in json.loads(data)})
     else:
         item = json.loads(data)
-        return {item["id"]: item["value"]}
+        fields_dict.update({item["id"]: item["value"]})
+
+    return fields_dict

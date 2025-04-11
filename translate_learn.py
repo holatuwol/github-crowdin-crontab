@@ -56,6 +56,9 @@ def authorize():
         "credential"
     ]
 
+    if len(client_id) == 0 or len(client_secret) == 0:
+        return
+
     params = {
         "client_id": client_id,
         "client_secret": client_secret,
@@ -82,9 +85,7 @@ def copy_crowdin_to_local(source_language, target_language):
 
     repository = get_repository(learn_domain)
 
-    new_files, all_files, file_info = get_repository_state(
-        repository, source_language[:2], target_language[:2]
-    )
+    _, file_info = get_repository_state(repository, target_language[:2])
 
     old_dir = os.getcwd()
     os.chdir(learn_scratch_dir)
@@ -170,8 +171,6 @@ def copy_local_to_crowdin(source_language, target_language):
     old_dir = os.getcwd()
     os.chdir("%s/%s" % (learn_scratch_dir, source_language[:2]))
 
-    # don't upload more than 50 files, because we'll hit quota limits
-
     crowdin_directory = get_directory(repository, "", False)
 
     if crowdin_directory is not None:
@@ -182,13 +181,21 @@ def copy_local_to_crowdin(source_language, target_language):
 
         status_code, response_data = crowdin_request(delete_url, "DELETE")
 
+        logging.error(status_code)
+        logging.error(response_data)
+
+    if len(outdated_articles) == 0:
+        return False
+
+    # don't upload more than 50 files, because we'll hit quota limits
+
     crowdin_upload_sources(
         repository, source_language[:2], target_language[:2], outdated_articles[:50]
     )
 
     os.chdir(old_dir)
 
-    return outdated_articles
+    return True
 
 
 def copy_local_to_learn(source_language, target_language):
@@ -356,24 +363,12 @@ def publish_target_content(article_id, source_language, target_language):
 
 
 def translate_learn_on_crowdin(source_language, target_language):
-    outdated_articles = get_outdated_articles(source_language)
-
     repository = get_repository(learn_domain)
-
-    new_files, all_files, file_info = get_repository_state(
-        repository, source_language[:2], target_language[:2]
-    )
 
     old_dir = os.getcwd()
     os.chdir("%s/%s" % (learn_scratch_dir, source_language[:2]))
 
-    pre_translate(
-        repository,
-        source_language[:2],
-        target_language[:2],
-        outdated_articles,
-        file_info,
-    )
+    pre_translate(repository, source_language[:2], target_language[:2])
 
     os.chdir(old_dir)
 
@@ -382,19 +377,17 @@ if __name__ == "__main__":
     try:
         actions = set(sys.argv[1:])
 
-        if "sync" in actions:
+        if "copy_learn_to_local" in actions:
             copy_learn_to_local("en_US")
 
-        if "upload" in actions:
-            copy_local_to_crowdin("en_US", "ja_JP")
-
-        if "translate" in actions:
+        while True:
             translate_learn_on_crowdin("en_US", "ja_JP")
-
-        if "download" in actions:
             copy_crowdin_to_local("en_US", "ja_JP")
 
-        if "publish" in actions:
+            if not copy_local_to_crowdin("en_US", "ja_JP"):
+                break
+
+        if "copy_local_to_learn" in actions:
             copy_local_to_learn("en_US", "ja_JP")
     finally:
         save_session()
