@@ -380,12 +380,13 @@ if __name__ == "__main__":
         if "copy_learn_to_local" in actions:
             copy_learn_to_local("en_US")
 
-        while True:
-            translate_learn_on_crowdin("en_US", "ja_JP")
-            copy_crowdin_to_local("en_US", "ja_JP")
+        if "translate" in actions:
+            while True:
+                translate_learn_on_crowdin("en_US", "ja_JP")
+                copy_crowdin_to_local("en_US", "ja_JP")
 
-            if not copy_local_to_crowdin("en_US", "ja_JP"):
-                break
+                if not copy_local_to_crowdin("en_US", "ja_JP"):
+                    break
 
         if "copy_local_to_learn" in actions:
             copy_local_to_learn("en_US", "ja_JP")

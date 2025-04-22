@@ -232,8 +232,8 @@ def pre_translate(repository, source_language, target_language):
         repository, source_language, target_language, "translation memory"
     )
 
-    if source_language in ["en", "ja"] and target_language in ["en", "ja"]:
-        translate_with_machine(repository, source_language, target_language, "DeepL")
+    # if source_language in ["en", "ja"] and target_language in ["en", "ja"]:
+    #     translate_with_machine(repository, source_language, target_language, "DeepL")
 
     translate_with_machine(repository, source_language, target_language, "Google")
 
