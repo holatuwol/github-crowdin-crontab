@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import binascii
+
+from bs4 import BeautifulSoup
 from crowdin import (
     crowdin_download_translations,
     crowdin_upload_sources,
@@ -25,7 +27,7 @@ from session import save_session
 import sys
 
 disclaimer = {
-    "ja_JP": 'ご覧のページは、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、 <a href="mailto:support-content-jp@liferay.com">こちら</a> までご連絡ください。'
+    "ja-JP": 'ご覧のページは、お客様の利便性のために一部機械翻訳されています。また、ドキュメントは頻繁に更新が加えられており、翻訳は未完成の部分が含まれることをご了承ください。最新情報は都度公開されておりますため、必ず英語版をご参照ください。翻訳に問題がある場合は、 <a href="mailto:support-content-jp@liferay.com">こちら</a> までご連絡ください。'
 }
 
 env = load_dotenv()
@@ -34,8 +36,15 @@ learn_domain = os.getenv("learn_domain")
 learn_group_id = os.getenv("learn_group_id")
 learn_scratch_dir = os.getenv("learn_scratch_dir")
 
+learn_url = (
+    f"http://{learn_domain}"
+    if learn_domain == "localhost:8080"
+    else f"https://{learn_domain}"
+)
+
 access_token = None
 access_token_expires = None
+use_i18n_put_for_update = True
 
 headers = {
     "Accept": "application/json",
@@ -66,7 +75,7 @@ def authorize():
     }
 
     r = session.post(
-        f"https://{learn_domain}/o/oauth2/token",
+        f"{learn_url}/o/oauth2/token",
         data=params,
         headers={"User-Agent": "translate_learn.py"},
     )
@@ -123,7 +132,7 @@ def copy_learn_to_local(language):
         with open(cache_file, "r", encoding="utf-8") as f:
             new_articles = json.load(f)
     else:
-        get_articles_url = f"https://{learn_domain}/o/headless-delivery/v1.0/sites/{learn_group_id}/structured-contents"
+        get_articles_url = f"{learn_url}/o/headless-delivery/v1.0/sites/{learn_group_id}/structured-contents"
 
         params = {"flatten": "true", "filter": f"dateModified ge {last_search_time}"}
 
@@ -212,6 +221,9 @@ def copy_local_to_learn(source_language, target_language):
 
 
 def get_outdated_articles(language):
+    # if True:
+    #     return ["ja/33237462.html", "ja/34607584.html"]
+
     language_folder = "%s/%s" % (learn_scratch_dir, language[:2])
     outdated_articles = []
 
@@ -281,7 +293,7 @@ def make_headless_request(url, method, accept_language, data):
     authorize()
 
     headless_headers = headers.copy()
-    headless_headers["Accept-Language"] = accept_language.replace("_", "-")
+    headless_headers["Accept-Language"] = accept_language
 
     if method == "GET":
         r = session.get(url, params=data, headers=headless_headers)
@@ -292,6 +304,8 @@ def make_headless_request(url, method, accept_language, data):
     else:
         raise Exception("Unrecognized method: %s" % method)
 
+    print(f"{method} {url} ({r.status_code})")
+
     try:
         return r.status_code, r.json()
     except:
@@ -299,8 +313,6 @@ def make_headless_request(url, method, accept_language, data):
 
 
 def publish_target_content(article_id, source_language, target_language):
-    update_article_url = f"https://{learn_domain}/o/headless-delivery/v1.0/structured-contents/{article_id}"
-
     html_file = "%s/%s.html" % (target_language[:2], article_id)
 
     with open(html_file, "r", encoding="utf-8") as f:
@@ -314,52 +326,116 @@ def publish_target_content(article_id, source_language, target_language):
             html_content,
         )
 
-    json_file = "%s/%s.json" % (source_language[:2], article_id)
+    method, params = get_update_params(
+        article_id, source_language, target_language, update_content
+    )
 
-    with open(json_file, "r", encoding="utf-8") as f:
-        params = json.load(f)
+    if method is None:
+        return
 
-    available_languages = params["availableLanguages"]
-
-    keys = [key for key in params]
-    for key in keys:
-        if key not in ["contentFields", "contentStructureId", "title"]:
-            del params[key]
-
-    for field in params["contentFields"]:
-        keys = [key for key in field]
-        for key in keys:
-            if key not in ["contentFieldValue", "name"]:
-                del field[key]
-
-    content_field = [
-        field for field in params["contentFields"] if field["name"] == "content"
-    ][0]
-    content_field["contentFieldValue"]["data"] = update_content
-
-    if target_language in available_languages:
-        logging.info(
-            "Updating translation to %s on article %s" % (target_language, article_id)
-        )
-
-        status_code, response_data = make_headless_request(
-            update_article_url, "PATCH", target_language, params
-        )
-    else:
-        logging.info(
-            "Adding translation to %s on article %s" % (target_language, article_id)
-        )
-        logging.info(json.dumps(params))
-
-        status_code, response_data = make_headless_request(
-            update_article_url, "PUT", target_language, params
-        )
+    status_code, response_data = make_headless_request(
+        f"{learn_url}/o/headless-delivery/v1.0/structured-contents/{article_id}",
+        method,
+        target_language,
+        params,
+    )
 
     if status_code == 200:
         with open("%s.crc32" % html_file, "w", encoding="utf-8") as f:
             f.write(str(binascii.crc32(html_content.encode("utf-8"))))
     else:
-        raise Exception(f"{response_data} (error code {status_code})")
+        print(
+            "failed to publish %s (status code: %d, data: %s)"
+            % (html_file, status_code, json.dumps(response_data))
+        )
+
+
+def get_update_params(article_id, source_language, target_language, update_content):
+    status_code, source_data = make_headless_request(
+        f"{learn_url}/o/headless-delivery/v1.0/structured-contents/{article_id}",
+        "GET",
+        source_language,
+        {},
+    )
+
+    if status_code != 200:
+        return
+
+    available_languages = source_data["availableLanguages"]
+    update_title = source_data["title"]
+    update_document = BeautifulSoup(update_content, features="html.parser")
+
+    h1_element = update_document.find(lambda x: x.name.lower() == "h1")
+    if h1_element is not None:
+        update_title = h1_element.getText()
+
+    if not use_i18n_put_for_update or target_language in available_languages:
+        params = {
+            "title": update_title,
+            "description": source_data["description"],
+            "contentFields": [
+                {
+                    "name": field["name"],
+                    "contentFieldValue": {
+                        "data": (
+                            update_content
+                            if field["name"] == "content"
+                            else field["contentFieldValue"]["data"]
+                        )
+                    },
+                }
+                for field in source_data["contentFields"]
+            ],
+        }
+
+        return "PATCH" if target_language in available_languages else "PUT", params
+
+    params = json.loads(json.dumps(source_data))
+    del params["actions"]
+
+    params["availableLanguages"].append(target_language)
+
+    params["title"] = update_title
+    params["title_i18n"] = {source_language: source_data["title"]}
+    params["description"] = source_data["description"]
+    params["description_i18n"] = {source_language: source_data["description"]}
+
+    for field in params["contentFields"]:
+        field["contentFieldValue_i18n"] = {
+            source_language: {"data": field["contentFieldValue"]["data"]}
+        }
+
+        if field["name"] == "content":
+            field["contentFieldValue"]["data"] = update_content
+
+    params_fields = {
+        field["name"]: field["contentFieldValue_i18n"]
+        for field in params["contentFields"]
+    }
+
+    for language in available_languages:
+        if language == source_language:
+            continue
+
+        status_code, language_data = make_headless_request(
+            f"{learn_url}/o/headless-delivery/v1.0/structured-contents/{article_id}",
+            "GET",
+            language,
+            {"fields": "title,description,contentFields"},
+        )
+
+        if status_code != 200:
+            return None
+
+        params["title_i18n"][language] = language_data["title"]
+        params["description_i18n"][language] = language_data["description"]
+
+        for field in language_data["contentFields"]:
+            params_fields[field["name"]][language] = {
+                "data": field["contentFieldValue"]
+            }
+
+    return "PUT", params
 
 
 def translate_learn_on_crowdin(source_language, target_language):
@@ -378,17 +454,17 @@ if __name__ == "__main__":
         actions = set(sys.argv[1:])
 
         if "copy_learn_to_local" in actions:
-            copy_learn_to_local("en_US")
+            copy_learn_to_local("en-US")
 
         if "translate" in actions:
             while True:
-                translate_learn_on_crowdin("en_US", "ja_JP")
-                copy_crowdin_to_local("en_US", "ja_JP")
+                translate_learn_on_crowdin("en-US", "ja-JP")
+                copy_crowdin_to_local("en-US", "ja-JP")
 
-                if not copy_local_to_crowdin("en_US", "ja_JP"):
+                if not copy_local_to_crowdin("en-US", "ja-JP"):
                     break
 
         if "copy_local_to_learn" in actions:
-            copy_local_to_learn("en_US", "ja_JP")
+            copy_local_to_learn("en-US", "ja-JP")
     finally:
         save_session()
