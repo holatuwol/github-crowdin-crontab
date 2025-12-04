@@ -32,7 +32,7 @@ Please be aware that the page you are viewing has been machine translated from J
 """.strip(),
 }
 
-ignore_characters = "∟→↑←↓⇨▼○×‘⌘├──"
+ignore_characters = "∟→↑←↓⇨▼○×'⌘├──"
 japanese_spaces = "\u3000\u00a0"
 japanese_punctuation = "【】「」（）：…⋮・□。、"
 

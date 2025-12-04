@@ -1,5 +1,3 @@
-source_language,git_repository,git_folder,project_id,project_name,project_folder
-en,zendesk-articles,en,420856,liferay-japan-documentation,liferay-support.zendesk.com
-en,zendesk-articles-ja,ja,428398,liferay-japan-gs,liferay-support.zendesk.com
-en,learn-xliff,en,420856,liferay-japan-documentation,learn.liferay.com
-en,learn-uat-xliff,en,420856,liferay-japan-documentation,learn-uat.liferay.com
+source_language,git_root,git_folder,project_id,project_name,project_folder
+en,/home/me/dev/translate-learn,en,420856,liferay-japan-documentation,learn.liferay.com
+en,/home/me/dev/translate-learn,en,420856,liferay-japan-documentation,learn-uat.liferay.com

@@ -9,6 +9,7 @@ import pickle
 import random
 import requests
 from session import initial_dir, session
+import time
 
 # Retrieve information from 1password
 
@@ -120,6 +121,18 @@ user_id = None
 
 
 def crowdin_request(api_path, method="GET", data=None, files=None):
+    for i in range(0, 4):
+        try:
+            return crowdin_request_helper(api_path, method, data, files)
+        except:
+            print('Exception requesting URL %s, retrying in 60 seconds' % api_path)
+            time.sleep(60)
+            pass
+
+    return crowdin_request_helper(api_path, method, data, files)
+
+
+def crowdin_request_helper(api_path, method="GET", data=None, files=None):
     global user_id
 
     if data is None:
@@ -389,15 +402,13 @@ def get_repository(domain):
 def get_repository_helper(
     projects,
     source_language,
-    git_repository,
+    git_root,
     git_folder,
     project_id,
     project_name,
     project_folder,
 ):
     crowdin_single_folder = project_folder
-
-    git_root = os.path.dirname(initial_dir) + "/" + git_repository
 
     if not os.path.isdir(git_root):
         return None

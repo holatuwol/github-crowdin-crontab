@@ -1,0 +1,1 @@
+Array.from(document.querySelectorAll('.translation-progress-holder .number:first-child')).filter((node) => node.textContent?.trim() != '100%').map((node) => node.closest('.node:not(.node-directory)')).filter((node) => node).forEach((incompleteItem) => incompleteItem.style.backgroundColor = '#fcf');

@@ -1,6 +1,7 @@
 .ipynb_checkpoints
 __pycache__
 session.ser
+translate_learn.log
 *.tar.gz
 *.json
 *.tbx

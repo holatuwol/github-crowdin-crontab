@@ -139,7 +139,7 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
         directory = get_directory(repository, os.path.dirname(file))
         directory_id = directory["id"]
 
-        logging.info("Uploading file %d/%d..." % (i, len(new_files)))
+        logging.info("Uploading file %d/%d (%s)..." % (i, len(new_files), file))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
 
@@ -196,13 +196,20 @@ def extract_crowdin_translation(
     if not os.path.exists(export_file_name):
         return
 
+    target_folder = os.path.join(repository.git_root, repository.dest_folder)
+
     with ZipFile(export_file_name) as zipdata:
         for zipinfo in zipdata.infolist():
+            if zipinfo.is_dir():
+                os.makedirs(zipinfo.filename, exist_ok=True)
+                continue
+
             if zipinfo.filename.find(source_file_prefix) == 0:
                 with open("%s.crc32" % zipinfo.filename, "w", encoding="utf-8") as f:
                     f.write(str(zipinfo.CRC))
+
             if zipinfo.filename.find(target_file_prefix) == 0:
-                zipdata.extract(zipinfo, repository.git_root)
+                zipdata.extract(zipinfo, target_folder)
 
     return export_file_name
 
