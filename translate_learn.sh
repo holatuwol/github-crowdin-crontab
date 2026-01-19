@@ -1,8 +1,8 @@
 #!/bin/bash
 
-learn_domain='learn-uat-preprod.lxc.liferay.com.localhost:8088'
+# learn_domain='learn-uat-preprod.lxc.liferay.com.localhost:8088'
 # learn_domain='learn-uat.liferay.com'
-# learn_domain='learn.liferay.com'
+learn_domain='learn.liferay.com'
 
 if [ "${learn_domain}" == "learn.liferay.com" ]; then
 	learn_group_id='23484947'

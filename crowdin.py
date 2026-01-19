@@ -17,12 +17,10 @@ from zipfile import ZipFile
 
 
 def crowdin_download_translations(
-    repository, source_language, target_language, refresh_files, file_info
+    repository, source_language, target_language, file_info
 ):
     source_language = source_language[:2]
     target_language = target_language[:2]
-
-    updated_files = list(refresh_files)
 
     api_path = "/projects/%s/directories" % repository.project_id
 
