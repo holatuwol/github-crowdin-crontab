@@ -220,7 +220,7 @@ def copy_learn_web_content_to_local(language):
 def copy_local_to_crowdin(source_language, target_language):
     repository = get_repository(learn_domain)
 
-    outdated_web_content_articles = get_outdated_articles(source_language, 'web_content')
+    outdated_web_content_articles = check_outdated_articles(source_language, 'web_content')
     language_folder = "%s/%s/%s" % (learn_scratch_dir, source_language[:2], 'web_content')
 
     old_dir = os.getcwd()
@@ -233,6 +233,8 @@ def copy_local_to_crowdin(source_language, target_language):
             repository.project_id,
             crowdin_directory["id"],
         )
+
+        logging.info("Deleting directory containing past translations (this takes awhile)")
 
         status_code, response_data = crowdin_request(delete_url, "DELETE")
 
@@ -284,7 +286,7 @@ def load_web_content_titles(source_language, target_language):
 
 
 def copy_local_to_learn(source_language, target_language):
-    outdated_web_content_articles = get_outdated_articles(target_language, 'web_content')
+    outdated_web_content_articles = check_outdated_articles(target_language, 'web_content')
 
     old_dir = os.getcwd()
     os.chdir(learn_scratch_dir)
@@ -298,7 +300,7 @@ def copy_local_to_learn(source_language, target_language):
     os.chdir(old_dir)
 
 
-def get_outdated_articles(language, subfolder):
+def check_outdated_articles(language, subfolder):
     language_folder = "%s/%s/%s" % (learn_scratch_dir, language[:2], subfolder)
     outdated_articles = []
 
@@ -525,8 +527,8 @@ if __name__ == "__main__":
     try:
         actions = set(sys.argv[1:])
 
-        if "check_outdated_files" in actions:
-            get_outdated_articles(source_language, "web_content")
+        if "check_outdated_articles" in actions:
+            check_outdated_articles("en-US", "web_content")
 
         if "copy_learn_to_local" in actions:
             copy_learn_to_local("en-US")

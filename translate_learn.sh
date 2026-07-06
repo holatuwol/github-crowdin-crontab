@@ -4,6 +4,20 @@
 # learn_domain='learn-uat.liferay.com'
 learn_domain='learn.liferay.com'
 
+op() {
+	if [ -f /usr/bin/op ]; then
+		OP_BINARY='/usr/bin/op'
+	elif [ "" != "${WINDOWS_HOME}" ]; then
+		OP_BINARY="$(find "${WINDOWS_HOME}/AppData/Local/Microsoft/WinGet/Packages/" -name op.exe)"
+	fi
+
+	if [ "" != "${OP_BINARY}" ]; then
+		"${OP_BINARY}" "$@"
+	else
+		echo 'Unable to find 1Password CLI'
+	fi
+}
+
 if [ "${learn_domain}" == "learn.liferay.com" ]; then
 	learn_group_id='23484947'
 	client_id="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client ID")"
@@ -16,9 +30,20 @@ else
 	learn_scratch_dir="/home/me/dev/translate-learn/learn-uat.liferay.com"
 fi
 
-learn_domain="${learn_domain}" \
-learn_group_id="${learn_group_id}" \
-learn_scratch_dir="${learn_scratch_dir}" \
-client_id="${client_id}" \
-client_secret="${client_secret}" \
-  python -u translate_learn.py $@ 2>&1 | tee translate_learn.log
+ACTION=$(
+	echo "check_outdated_articles
+copy_learn_to_local
+copy_local_to_crowdin
+translate_learn_on_crowdin
+copy_crowdin_to_local
+copy_local_to_learn" | fzf --query="${1}" --select-1
+)
+
+if [ "" != "${ACTION}" ]; then
+	learn_domain="${learn_domain}" \
+	learn_group_id="${learn_group_id}" \
+	learn_scratch_dir="${learn_scratch_dir}" \
+	client_id="${client_id}" \
+	client_secret="${client_secret}" \
+		uv run translate_learn.py "${ACTION}" 2>&1 | tee translate_learn.log
+fi
