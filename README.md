@@ -16,13 +16,14 @@ uv pip install -r requirements.txt
 ### Copy the latest batch to Crowdin
 
 ```
+./translate_learn.sh copy_learn_to_local
+./translate_learn.sh check_outdated_articles
 ./translate_learn.sh copy_local_to_crowdin
 ```
 
 ### Machine translate the uploaded batch
 
 **Note**: You can access the page with the Auto-Translate button (https://crowdin.com/project/liferay-japan-documentation) or use the links below to directly access the Auto-Translate pages.
-
 
 1. Perform an initial pass using translation memory
    * Auto-Translate (Translation Memory): https://crowdin.com/project/liferay-japan-documentation#autotranslate=tm
@@ -31,25 +32,25 @@ uv pip install -r requirements.txt
      * Target languages: Japanese
      * Scope: Untranslated strings
      * Files: learn.liferay.com
-   * Wait for completion: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 2. Perform a second pass using Google Translate
-   * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=tm
+   * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=mt
      * Auto-Translation via: Machine Translation
      * Translation engine: Google Translate
      * Target languages: Japanese
      * Scope: Untranslated strings
      * Files: learn.liferay.com
-   * Wait for completion: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 3. Perform a third pass using DeepL Translator:
-   * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=tm
+   * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=mt
      * Auto-Translation via: Machine Translation
     * Translation engine: DeepL Translator
     * Target languages: Japanese
     * Scope: Untranslated strings
     * Files: learn.liferay.com
-   * Wait for completion: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 ### Manually translate anything that was skipped
 
