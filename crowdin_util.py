@@ -2,7 +2,6 @@ from bs4 import BeautifulSoup
 from collections import namedtuple
 import json
 import logging
-import onepass
 import os
 import pandas as pd
 import pickle
@@ -13,16 +12,16 @@ import time
 
 # Retrieve information from 1password
 
-username = onepass.item("Crowdin", "username")["username"]
-password = onepass.item("Crowdin", "password")["password"]
+username = os.getenv("crowdin_username")
+password = os.getenv("crowdin_password")
 
-if username[0] == '"' and username[-1] == '"':
+if len(username) > 0 and username[0] == '"' and username[-1] == '"':
     username = username[1:-1]
 
-if password[0] == '"' and password[-1] == '"':
+if len(password) > 0 and password[0] == '"' and password[-1] == '"':
     password = password[1:-1]
 
-bearer_token = onepass.item("Crowdin Account Key v2", "credential")["credential"]
+bearer_token = os.getenv("crowdin_bearer_token")
 
 # Generate a random CSRF token
 

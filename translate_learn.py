@@ -286,6 +286,7 @@ def load_web_content_titles(source_language, target_language):
 
 
 def copy_local_to_learn(source_language, target_language):
+    print("Performing action copy_local_to_learn")
     outdated_web_content_articles = check_outdated_articles(target_language, 'web_content')
 
     old_dir = os.getcwd()
@@ -329,8 +330,9 @@ def check_outdated_articles(language, subfolder):
             new_hash = str(binascii.crc32(f.read()))
 
         if old_hash != new_hash:
-            print('mismatched hash %s' % hash_file)
+            print('mismatched hash %s (%s != %s)' % (hash_file, old_hash, new_hash))
             outdated_articles.append(os.path.join(subfolder, html_file_name))
+            continue
 
     print(len(outdated_articles), "out of date files")
 
@@ -526,23 +528,30 @@ def translate_learn_on_crowdin(source_language, target_language):
 if __name__ == "__main__":
     try:
         actions = set(sys.argv[1:])
+        print(actions)
 
         if "check_outdated_articles" in actions:
+            print("Performing action check_outdated_articles")
             check_outdated_articles("en-US", "web_content")
 
         if "copy_learn_to_local" in actions:
+            print("Performing action copy_learn_to_local")
             copy_learn_to_local("en-US")
 
         if "copy_local_to_crowdin" in actions:
+            print("Performing action copy_local_to_crowdin")
             copy_local_to_crowdin("en-US", "ja-JP")
 
         if "translate_learn_on_crowdin" in actions:
+            print("Performing action translate_learn_on_crowdin")
             translate_learn_on_crowdin("en-US", "ja-JP")
 
         if "copy_crowdin_to_local" in actions:
+            print("Performing action copy_crowdin_to_local")
             copy_crowdin_to_local("en-US", "ja-JP")
 
         if "copy_local_to_learn" in actions:
+            print("Performing action copy_local_to_learn")
             copy_local_to_learn("en-US", "ja-JP")
     finally:
         save_session()

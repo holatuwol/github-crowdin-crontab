@@ -3,6 +3,10 @@
 SCRIPT_FOLDER=$(dirname $0)
 source ${SCRIPT_FOLDER}/bin/activate
 
+ACTION=$(printf "%s\n" load_backup store_backup check_outdated_articles copy_learn_to_local copy_local_to_crowdin copy_crowdin_to_local copy_local_to_learn | fzf --query="${1}" --select-1)
+
+echo "Chose action ${ACTION}"
+
 if [ -z "${S3_BUCKET}" ]; then
 	S3_BUCKET=mdang.tokyo
 fi
@@ -14,36 +18,6 @@ fi
 # learn_domain='learn-uat-preprod.lxc.liferay.com.localhost:8088'
 # learn_domain='learn-uat.liferay.com'
 learn_domain='learn.liferay.com'
-
-op() {
-	if [ -f /usr/bin/op ]; then
-		OP_BINARY='/usr/bin/op'
-	elif [ "" != "${WINDOWS_HOME}" ]; then
-		OP_BINARY="$(find "${WINDOWS_HOME}/AppData/Local/Microsoft/WinGet/Packages/" -name op.exe)"
-	fi
-
-	if [ "" != "${OP_BINARY}" ]; then
-		"${OP_BINARY}" "$@"
-	else
-		echo 'Unable to find 1Password CLI'
-	fi
-}
-
-learn_scratch_parent_dir="/home/me/dev/translate-learn"
-
-if [ "${learn_domain}" == "learn.liferay.com" ]; then
-	learn_group_id='23484947'
-	client_id="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client ID")"
-	client_secret="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client Secret")"
-	learn_scratch_dir="${learn_scratch_parent_dir}/learn.liferay.com"
-	learn_scratch_file="learn.liferay.com.7z"
-else
-	learn_group_id='32483059'
-	client_id="$(op item get "OAuth2 learn-uat.liferay.com" --fields username)"
-	client_secret="$(op item get "OAuth2 learn-uat.liferay.com" --fields credential --reveal)"
-	learn_scratch_dir="${learn_scratch_parent_dir}/learn-uat.liferay.com"
-	learn_scratch_file="learn-uat.liferay.com.7z"
-fi
 
 loadbackup() {
 	if [ -d "${learn_scratch_dir}" ]; then
@@ -74,24 +48,78 @@ storebackup() {
 	rm "${learn_scratch_dir}.7z"
 }
 
-ACTION=$(
-	echo "check_outdated_articles
-copy_learn_to_local
-copy_local_to_crowdin
-translate_learn_on_crowdin
-copy_crowdin_to_local
-copy_local_to_learn" | fzf --query="${1}" --select-1
-)
+learn_scratch_parent_dir="/home/me/dev/translate-learn"
 
-if [ "" != "${ACTION}" ]; then
-	loadbackup
+if [ "${learn_domain}" == "learn.liferay.com" ]; then
+	learn_group_id='23484947'
+	learn_scratch_dir="${learn_scratch_parent_dir}/learn.liferay.com"
+	learn_scratch_file="learn.liferay.com.7z"
+else
+	learn_group_id='32483059'
+	learn_scratch_dir="${learn_scratch_parent_dir}/learn-uat.liferay.com"
+	learn_scratch_file="learn-uat.liferay.com.7z"
+fi
+
+op() {
+	if [ -f /usr/bin/op ]; then
+		OP_BINARY='/usr/bin/op'
+	elif [ "" != "${WINDOWS_HOME}" ]; then
+		OP_BINARY="$(find "${WINDOWS_HOME}/AppData/Local/Microsoft/WinGet/Packages/" -name op.exe)"
+	fi
+
+	if [ "" != "${OP_BINARY}" ]; then
+		"${OP_BINARY}" "$@"
+	else
+		echo 'Unable to find 1Password CLI'
+	fi
+}
+
+(
+	client_id=""
+	client_secret=""
+
+	crowdin_username=""
+	crowdin_password=""
+	crowdin_bearer_token=""
+
+	if [[ ${ACTION} == *learn* ]]; then
+		op signin
+		op whoami
+
+		if [ "${learn_domain}" == "learn.liferay.com" ]; then
+			client_id="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client ID")"
+			client_secret="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client Secret")"
+		else
+			client_id="$(op item get "OAuth2 learn-uat.liferay.com" --fields username)"
+			client_secret="$(op item get "OAuth2 learn-uat.liferay.com" --fields credential --reveal)"
+		fi
+	elif [[ ${ACTION} == *crowdin* ]]; then
+		op signin
+		op whoami
+
+		# crowdin_username="$(op item get "Crowdin" --fields "username")"
+		# crowdin_password="$(op item get "Crowdin" --fields "password" --reveal)"
+		crowdin_bearer_token="$(op item get "Crowdin Account Key v2" --fields "credential" --reveal)"
+	fi
+
+	if [ "load_backup" == "${ACTION}" ]; then
+		loadbackup
+		exit $?
+	elif [ "store_backup" == "${ACTION}" ]; then
+		storebackup
+		exit $?
+	elif [ "" == "${ACTION}" ]; then
+		echo 'Unable to identify action'
+		exit 1
+	fi
 
 	learn_domain="${learn_domain}" \
 	learn_group_id="${learn_group_id}" \
 	learn_scratch_dir="${learn_scratch_dir}" \
 	client_id="${client_id}" \
 	client_secret="${client_secret}" \
-		uv run translate_learn.py "${ACTION}" 2>&1 | tee translate_learn.log
-
-	storebackup
-fi
+	crowdin_username="${crowdin_username}" \
+	crowdin_password="${crowdin_password}" \
+	crowdin_bearer_token="${crowdin_bearer_token}" \
+		python -u translate_learn.py "${ACTION}" 2>&1
+ ) | tee translate_learn.log

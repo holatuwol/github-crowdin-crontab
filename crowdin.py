@@ -69,7 +69,7 @@ def crowdin_download_translations(
             check_time = datetime.strptime(
                 created_at[:-3] + created_at[-2:], "%Y-%m-%dT%H:%M:%S%z"
             )
-            min_time = datetime.now(check_time.tzinfo) - timedelta(minutes=30)
+            min_time = datetime.now(check_time.tzinfo) - timedelta(minutes=15)
 
             if check_time > min_time:
                 return build["data"]
@@ -86,6 +86,7 @@ def crowdin_download_translations(
 
         data = {"targetLanguageIds": [source_language, target_language]}
 
+        logging.info("Submitting new build...")
         status_code, response_data = crowdin_request(api_path, "POST", data)
         recent_build = response_data
 
@@ -208,6 +209,9 @@ def extract_crowdin_translation(
 
             if zipinfo.filename.find(target_file_prefix) == 0:
                 zipdata.extract(zipinfo, target_folder)
+                crc32_file = "%s.crc32" % zipinfo.filename
+                if os.path.exists(crc32_file):
+                    os.remove(crc32_file)
 
     return export_file_name
 

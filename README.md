@@ -32,7 +32,7 @@ uv pip install -r requirements.txt
      * Target languages: Japanese
      * Scope: Untranslated strings
      * Files: learn.liferay.com
-   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion, which you can check on by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 2. Perform a second pass using Google Translate
    * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=mt
@@ -41,7 +41,7 @@ uv pip install -r requirements.txt
      * Target languages: Japanese
      * Scope: Untranslated strings
      * Files: learn.liferay.com
-   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion, which you can check on by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 3. Perform a third pass using DeepL Translator:
    * Auto-Translate (Machine Translation): https://crowdin.com/project/liferay-japan-documentation#autotranslate=mt
@@ -50,7 +50,7 @@ uv pip install -r requirements.txt
     * Target languages: Japanese
     * Scope: Untranslated strings
     * Files: learn.liferay.com
-   * Wait for completion by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+   * Wait for completion, which you can check on by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
 
 ### Manually translate anything that was skipped
 
