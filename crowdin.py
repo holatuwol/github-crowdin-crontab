@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from crowdin_check import hide_code_translations
 from crowdin_util import (
     crowdin_request,
@@ -128,28 +129,45 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
 
     before_upload = get_crowdin_file_info(repository, target_language)
 
-    existing_files = {}
+    unique_dirs = set(os.path.dirname(file) for file in new_files)
 
-    for i, file in enumerate(new_files):
+    unique_paths = sorted(unique_dirs)
+
+    directories = [get_directory(repository, path) for path in unique_paths]
+    directory_ids = [directory['id'] for directory in directories]
+    directory_id_by_path = {
+        path: directory_id
+            for path, directory_id in zip(unique_paths, directory_ids)
+    }
+
+    def get_existing_files(directory_id):
+        data = {"directoryId": directory_id}
+        api_path = "/projects/%s/files" % repository.project_id
+        status_code, directory_response_data = crowdin_request(
+            api_path, "GET", data
+        )
+        return directory_response_data
+
+    if len(directory_ids) > 0:
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            existing_files = {
+                directory_id: directory_response_data
+                    for directory_id, directory_response_data in zip(directory_ids, executor.map(get_existing_files, directory_ids))
+            }
+    else:
+        existing_files = {}
+
+    def upload_single_file(i, file):
         file_name = os.path.basename(file)
+        dir_path = os.path.dirname(file)
+        directory_id = directory_id_by_path[dir_path]
 
         logging.info("Preparing to upload file %d/%d..." % (i, len(new_files)))
-
-        directory = get_directory(repository, os.path.dirname(file))
-        directory_id = directory["id"]
-
         logging.info("Uploading file %d/%d (%s)..." % (i, len(new_files), file))
 
         status_code, response_data = upload_file_to_crowdin_storage(file)
-
-        if directory_id not in existing_files:
-            data = {"directoryId": directory_id}
-
-            api_path = "/projects/%s/files" % repository.project_id
-            status_code, directory_response_data = crowdin_request(
-                api_path, "GET", data
-            )
-            existing_files[directory_id] = directory_response_data
+        if response_data is None:
+            raise Exception("Failed to upload %s to Crowdin storage: HTTP %s" % (file, status_code))
 
         matching_files = [
             directory_file
@@ -176,6 +194,14 @@ def crowdin_upload_sources(repository, source_language, target_language, new_fil
             crowdin_request(api_path, "POST", data)
 
     if len(new_files) > 0:
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(upload_single_file, i, file)
+                for i, file in enumerate(new_files)
+            ]
+            for future in as_completed(futures):
+                future.result()
+
         after_upload = get_crowdin_file_info(repository, target_language)
     else:
         after_upload = before_upload

@@ -3,6 +3,7 @@
 import binascii
 
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from crowdin import (
     crowdin_download_translations,
     crowdin_upload_sources,
@@ -77,7 +78,7 @@ def authorize():
         headers={"User-Agent": "translate_learn.py"},
     )
 
-    print(f"POST {learn_url}/o/oauth2/token ({r.status_code})")
+    logging.info(f"POST {learn_url}/o/oauth2/token ({r.status_code})")
 
     response_json = r.json()
 
@@ -149,7 +150,7 @@ def copy_learn_knowledge_articles_to_local(language):
 
     new_articles = make_headless_list_request(get_articles_url, language, params)
 
-    print(len(new_articles), "articles modified since", last_search_time)
+    logging.info(f"{len(new_articles)} articles modified since {last_search_time}")
 
     for article in new_articles:
         with open(
@@ -188,7 +189,7 @@ def copy_learn_web_content_to_local(language):
 
     new_articles = make_headless_list_request(get_articles_url, language, params)
 
-    print(len(new_articles), "articles modified since", last_search_time)
+    logging.info(f"{len(new_articles)} articles modified since {last_search_time}")
 
     for article in new_articles:
         fields = article["contentFields"]
@@ -286,7 +287,7 @@ def load_web_content_titles(source_language, target_language):
 
 
 def copy_local_to_learn(source_language, target_language):
-    print("Performing action copy_local_to_learn")
+    logging.info("Performing action copy_local_to_learn")
     outdated_web_content_articles = check_outdated_articles(target_language, 'web_content')
 
     old_dir = os.getcwd()
@@ -294,9 +295,18 @@ def copy_local_to_learn(source_language, target_language):
 
     web_content_titles = load_web_content_titles(source_language, target_language)
 
-    for html_file in outdated_web_content_articles:
-        article_id = html_file[html_file.rfind("/") + 1 : -5]
-        publish_translated_web_content_article(article_id, source_language, target_language, web_content_titles)
+    if len(outdated_web_content_articles) > 0:
+        article_ids = [
+            html_file[html_file.rfind("/") + 1 : -5] for html_file in outdated_web_content_articles
+        ]
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(publish_translated_web_content_article, article_id, source_language, target_language, web_content_titles)
+                for article_id in article_ids
+            ]
+            for future in as_completed(futures):
+                future.result()
 
     os.chdir(old_dir)
 
@@ -306,7 +316,7 @@ def check_outdated_articles(language, subfolder):
     outdated_articles = []
 
     if not os.path.exists(language_folder):
-        print(len(outdated_articles), "out of date files")
+        logging.info(f"{len(outdated_articles)} out of date files")
 
         return outdated_articles
 
@@ -319,7 +329,7 @@ def check_outdated_articles(language, subfolder):
         hash_file = "%s.crc32" % html_file
 
         if not os.path.exists(hash_file):
-            print('missing hash %s' % hash_file)
+            logging.info('missing hash %s' % hash_file)
             outdated_articles.append(os.path.join(subfolder, html_file_name))
             continue
 
@@ -330,11 +340,11 @@ def check_outdated_articles(language, subfolder):
             new_hash = str(binascii.crc32(f.read()))
 
         if old_hash != new_hash:
-            print('mismatched hash %s (%s != %s)' % (hash_file, old_hash, new_hash))
+            logging.info('mismatched hash %s (%s != %s)' % (hash_file, old_hash, new_hash))
             outdated_articles.append(os.path.join(subfolder, html_file_name))
             continue
 
-    print(len(outdated_articles), "out of date files")
+    logging.info(f"{len(outdated_articles)} out of date files")
 
     return outdated_articles
 
@@ -357,7 +367,7 @@ def make_headless_list_request(url, accept_language, initial_params):
         page_number = page_number + 1
 
         params["page"] = page_number
-        print(
+        logging.info(
             f'{url} ({(page_number - 1) * 100} of {response_json["totalCount"]} results already seen)'
         )
 
@@ -385,7 +395,7 @@ def make_headless_request(url, method, accept_language, data):
     else:
         raise Exception("Unrecognized method: %s" % method)
 
-    print(f"{method} {url} ({r.status_code})")
+    logging.info(f"{method} {url} ({r.status_code})")
 
     try:
         return r.status_code, r.json()
@@ -435,7 +445,7 @@ def publish_translated_web_content_article(article_id, source_language, target_l
             with open("%s.crc32" % html_file, "w", encoding="utf-8") as f:
                 f.write(str(binascii.crc32(html_content.encode("utf-8"))))
     else:
-        print(
+        logging.info(
             "failed to publish %s (status code: %d, data: %s)"
             % (html_file, status_code, json.dumps(response_data))
         )
@@ -528,30 +538,30 @@ def translate_learn_on_crowdin(source_language, target_language):
 if __name__ == "__main__":
     try:
         actions = set(sys.argv[1:])
-        print(actions)
+        logging.info(actions)
 
         if "check_outdated_articles" in actions:
-            print("Performing action check_outdated_articles")
+            logging.info("Performing action check_outdated_articles")
             check_outdated_articles("en-US", "web_content")
 
         if "copy_learn_to_local" in actions:
-            print("Performing action copy_learn_to_local")
+            logging.info("Performing action copy_learn_to_local")
             copy_learn_to_local("en-US")
 
         if "copy_local_to_crowdin" in actions:
-            print("Performing action copy_local_to_crowdin")
+            logging.info("Performing action copy_local_to_crowdin")
             copy_local_to_crowdin("en-US", "ja-JP")
 
         if "translate_learn_on_crowdin" in actions:
-            print("Performing action translate_learn_on_crowdin")
+            logging.info("Performing action translate_learn_on_crowdin")
             translate_learn_on_crowdin("en-US", "ja-JP")
 
         if "copy_crowdin_to_local" in actions:
-            print("Performing action copy_crowdin_to_local")
+            logging.info("Performing action copy_crowdin_to_local")
             copy_crowdin_to_local("en-US", "ja-JP")
 
         if "copy_local_to_learn" in actions:
-            print("Performing action copy_local_to_learn")
+            logging.info("Performing action copy_local_to_learn")
             copy_local_to_learn("en-US", "ja-JP")
     finally:
         save_session()
