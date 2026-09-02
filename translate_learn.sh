@@ -74,52 +74,51 @@ op() {
 	fi
 }
 
-(
-	client_id=""
-	client_secret=""
+client_id=""
+client_secret=""
 
-	crowdin_username=""
-	crowdin_password=""
-	crowdin_bearer_token=""
+crowdin_username=""
+crowdin_password=""
+crowdin_bearer_token=""
 
-	if [[ ${ACTION} == *learn* ]]; then
-		op signin
-		op whoami
+if [[ ${ACTION} == *learn* ]]; then
+	op signin
+	op whoami
 
-		if [ "${learn_domain}" == "learn.liferay.com" ]; then
-			client_id="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client ID")"
-			client_secret="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client Secret")"
-		else
-			client_id="$(op item get "OAuth2 learn-uat.liferay.com" --fields username)"
-			client_secret="$(op item get "OAuth2 learn-uat.liferay.com" --fields credential --reveal)"
-		fi
-	elif [[ ${ACTION} == *crowdin* ]]; then
-		op signin
-		op whoami
-
-		# crowdin_username="$(op item get "Crowdin" --fields "username")"
-		# crowdin_password="$(op item get "Crowdin" --fields "password" --reveal)"
-		crowdin_bearer_token="$(op item get "Crowdin Account Key v2" --fields "credential" --reveal)"
+	if [ "${learn_domain}" == "learn.liferay.com" ]; then
+		client_id="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client ID")"
+		client_secret="$(op item get "Liferay Learn Japan OAuth2 PRD" --fields "Client Secret")"
+	else
+		client_id="$(op item get "OAuth2 learn-uat.liferay.com" --fields username)"
+		client_secret="$(op item get "OAuth2 learn-uat.liferay.com" --fields credential --reveal)"
 	fi
+elif [[ ${ACTION} == *crowdin* ]]; then
+	op signin
+	op whoami
 
-	if [ "load_backup" == "${ACTION}" ]; then
-		loadbackup
-		exit $?
-	elif [ "store_backup" == "${ACTION}" ]; then
-		storebackup
-		exit $?
-	elif [ "" == "${ACTION}" ]; then
-		echo 'Unable to identify action'
-		exit 1
-	fi
+	crowdin_bearer_token="$(op item get "Crowdin Account Key v2" --fields "credential" --reveal)"
+fi
 
-	learn_domain="${learn_domain}" \
-	learn_group_id="${learn_group_id}" \
-	learn_scratch_dir="${learn_scratch_dir}" \
-	client_id="${client_id}" \
-	client_secret="${client_secret}" \
-	crowdin_username="${crowdin_username}" \
-	crowdin_password="${crowdin_password}" \
-	crowdin_bearer_token="${crowdin_bearer_token}" \
-		python -u translate_learn.py "${ACTION}" 2>&1
- ) | tee translate_learn.log
+if [ "load_backup" == "${ACTION}" ]; then
+	loadbackup
+	exit $?
+elif [ "store_backup" == "${ACTION}" ]; then
+	storebackup
+	exit $?
+elif [ "" == "${ACTION}" ]; then
+	echo 'Unable to identify action'
+	exit 1
+fi
+
+echo '----------------------------------------------------------------' | tee -a translate_learn.log
+date | tee -a translate_learn.log
+
+learn_domain="${learn_domain}" \
+learn_group_id="${learn_group_id}" \
+learn_scratch_dir="${learn_scratch_dir}" \
+client_id="${client_id}" \
+client_secret="${client_secret}" \
+crowdin_username="${crowdin_username}" \
+crowdin_password="${crowdin_password}" \
+crowdin_bearer_token="${crowdin_bearer_token}" \
+	python -u translate_learn.py "${ACTION}" 2>&1 | tee -a translate_learn.log
