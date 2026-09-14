@@ -171,7 +171,7 @@ def crowdin_request_helper(api_path, method="GET", data=None, files=None):
         return (r.status_code, None)
 
     if r.status_code == 401:
-        logging.error("Invalid bearer token, please update")
+        logging.error("Invalid bearer token accessing URL %s, please update" % request_url)
         exit()
 
     if r.status_code >= 400:

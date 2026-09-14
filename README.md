@@ -1,17 +1,26 @@
 ## Script prerequisites
 
-Install `uv` following the instructions at https://docs.astral.sh/uv/#projects
+Set up a virtual environment
 
 ```
-uv venv
-uv pip install -r requirements.txt
+python3 -m venv .
+source bin/activate
+pip install -r requirements.txt
 ```
 
 ## Backup retrieval
 
-
+```
+./translate_learn.sh load_backup
+```
 
 ## Translation process
+
+### Save the current state
+
+```
+./translate_learn.sh store_backup
+```
 
 ### Copy the latest batch to Crowdin
 
@@ -19,6 +28,12 @@ uv pip install -r requirements.txt
 ./translate_learn.sh copy_learn_to_local
 ./translate_learn.sh check_outdated_articles
 ./translate_learn.sh copy_local_to_crowdin
+```
+
+### Hide code blocks
+
+```
+./translate_learn.sh hide_code_blocks
 ```
 
 ### Machine translate the uploaded batch
@@ -51,6 +66,12 @@ uv pip install -r requirements.txt
     * Scope: Untranslated strings
     * Files: learn.liferay.com
    * Wait for completion, which you can check on by clicking on the `queue` link in the pop-up: https://crowdin.com/project/liferay-japan-documentation/tools/pre-translation-queue
+
+### Sanity check the translations for unbalanced tags
+
+```
+./translate_learn.sh sanity_check
+```
 
 ### Manually translate anything that was skipped
 

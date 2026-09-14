@@ -3,9 +3,21 @@
 SCRIPT_FOLDER=$(dirname $0)
 source ${SCRIPT_FOLDER}/bin/activate
 
-ACTION=$(printf "%s\n" load_backup store_backup check_outdated_articles copy_learn_to_local copy_local_to_crowdin copy_crowdin_to_local copy_local_to_learn | fzf --query="${1}" --select-1)
+ACTION=$(printf "%s\n" load_backup store_backup check_outdated_articles copy_learn_to_local copy_local_to_crowdin hide_code_blocks sanity_check copy_crowdin_to_local copy_local_to_learn | fzf --query="${1}" --select-1)
 
 echo "Chose action ${ACTION}"
+
+if [ "" == "${ACTION}" ]; then
+	exit 1
+fi
+
+if [ "hide_code_blocks" == "${ACTION}" ] || [ "sanity_check" == "${ACTION}" ]; then
+	SCRIPT='crowdin_check.py'
+else
+	SCRIPT='translate_learn.py'
+fi
+
+echo "Preparing to execute script ${SCRIPT}"
 
 if [ -z "${S3_BUCKET}" ]; then
 	S3_BUCKET=mdang.tokyo
@@ -92,7 +104,7 @@ if [[ ${ACTION} == *learn* ]]; then
 		client_id="$(op item get "OAuth2 learn-uat.liferay.com" --fields username)"
 		client_secret="$(op item get "OAuth2 learn-uat.liferay.com" --fields credential --reveal)"
 	fi
-elif [[ ${ACTION} == *crowdin* ]]; then
+elif [ "${SCRIPT}" == "crowdin_check.py" ] || [[ ${ACTION} == *crowdin* ]]; then
 	op signin
 	op whoami
 
@@ -121,4 +133,4 @@ client_secret="${client_secret}" \
 crowdin_username="${crowdin_username}" \
 crowdin_password="${crowdin_password}" \
 crowdin_bearer_token="${crowdin_bearer_token}" \
-	python -u translate_learn.py "${ACTION}" 2>&1 | tee -a translate_learn.log
+	python -u "${SCRIPT}" "${ACTION}" 2>&1 | tee -a translate_learn.log

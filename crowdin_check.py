@@ -1,7 +1,15 @@
 #!/usr/bin/env python
 
-from crowdin_util import CrowdInRepository, crowdin_request, get_crowdin_file_info
+from concurrent.futures import ThreadPoolExecutor
+from crowdin_util import (
+    crowdin_request,
+    get_crowdin_file_info,
+    get_repository,
+    get_repository_state,
+)
+from dotenv import load_dotenv
 import logging
+import os
 import sys
 
 from session import save_session
@@ -17,27 +25,16 @@ valid_tag_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:_-"
 
 # Clear out code translations
 
+env = load_dotenv()
+
+learn_domain = os.getenv("learn_domain")
 
 def check_pre_translations(
-    project_id,
-    project_name,
-    project_folder,
+    repository,
     source_language,
     target_language,
     force=False,
 ):
-    repository = CrowdInRepository(
-        None,
-        None,
-        source_language,
-        project_id,
-        project_name,
-        None,
-        project_folder,
-        False,
-        False,
-    )
-
     file_info = get_crowdin_file_info(repository, target_language)
 
     for file_name, file_metadata in file_info.items():
@@ -139,36 +136,26 @@ def is_malformed_translation(text):
 
 
 def process_code_translations(
-    project_id,
-    project_name,
-    project_folder,
+    repository,
     source_language,
     target_language,
     force=False,
 ):
-    repository = CrowdInRepository(
-        None,
-        None,
-        source_language,
-        project_id,
-        project_name,
-        None,
-        project_folder,
-        False,
-        False,
-    )
-
     file_info = get_crowdin_file_info(repository, target_language)
 
-    for file_name, file_metadata in file_info.items():
-        if (
-            force
-            or "id" in file_metadata
-            and file_metadata["phrases"] != file_metadata["translated"]
-        ):
-            hide_code_translations(
-                repository, source_language, target_language, file_name, file_metadata
-            )
+    futures = []
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        for file_name, file_metadata in file_info.items():
+            if (
+                force
+                or "id" in file_metadata
+                and file_metadata["phrases"] != file_metadata["translated"]
+            ):
+                futures.append(executor.submit(hide_code_translations, repository, source_language, target_language, file_name, file_metadata))
+    
+    for future in futures:
+        future.result()
 
 
 def set_translation_hidden(repository, project_id, string_id, is_hidden):
@@ -178,10 +165,13 @@ def set_translation_hidden(repository, project_id, string_id, is_hidden):
         [{"op": "replace", "path": "/isHidden", "value": is_hidden}],
     )
 
-
 if __name__ == "__main__":
+    repository = get_repository(learn_domain)
+
     try:
-        check_pre_translations(*sys.argv[1:])
-        process_code_translations(*sys.argv[1:])
+        if sys.argv[1] == 'hide_code_blocks':
+            process_code_translations(repository, 'en', 'ja')
+        elif sys.argv[1] == 'sanity_check':
+            check_pre_translations(repository, 'en', 'ja')
     finally:
         save_session()
