@@ -16,17 +16,22 @@ pip install -r requirements.txt
 
 ## Translation process
 
-### Save the current state
+### Save the current backup
 
 ```
 ./translate_learn.sh store_backup
 ```
 
-### Copy the latest batch to Crowdin
+### Check if we need to translate anything
 
 ```
 ./translate_learn.sh copy_learn_to_local
 ./translate_learn.sh check_outdated_articles
+```
+
+### Upload the latest batch to Crowdin
+
+```
 ./translate_learn.sh copy_local_to_crowdin
 ```
 
